@@ -1,0 +1,127 @@
+
+
+import csv
+import json
+import logging
+import os
+from datetime import datetime
+from typing import Dict, List, Set, Tuple
+
+from .fingerprint import create_apartment_fingerprint
+
+logger = logging.getLogger(__name__)
+
+
+def load_existing_apartments(
+    json_file: str = "apartamentos.json", csv_file: str = "apartamentos.csv"
+) -> Tuple[Set[str], Set[str]]:
+    existing_links = set()
+    existing_fingerprints = set()
+
+    if os.path.exists(json_file):
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+                for apt in existing:
+                    link = apt.get("link", "")
+                    if link:
+                        existing_links.add(link)
+                    fingerprint = create_apartment_fingerprint(apt)
+                    if fingerprint:
+                        existing_fingerprints.add(fingerprint)
+        except Exception as e:
+            logger.warning(f"Error loading {json_file}: {e}")
+
+    if os.path.exists(csv_file):
+        try:
+            with open(csv_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    link = row.get("link", "")
+                    if link:
+                        existing_links.add(link)
+
+                    apt_dict = {
+                        "street": row.get("street", ""),
+                        "neighborhood": row.get("neighborhood", ""),
+                        "area": (
+                            int(row["area"])
+                            if row.get("area") and row["area"].isdigit()
+                            else None
+                        ),
+                        "bedrooms": (
+                            int(row["bedrooms"])
+                            if row.get("bedrooms") and row["bedrooms"].isdigit()
+                            else None
+                        ),
+                        "price": (
+                            float(row["price"])
+                            if row.get("price")
+                            and row["price"].replace(".", "").isdigit()
+                            else None
+                        ),
+                    }
+                    fingerprint = create_apartment_fingerprint(apt_dict)
+                    if fingerprint:
+                        existing_fingerprints.add(fingerprint)
+        except Exception as e:
+            logger.warning(f"Error loading {csv_file}: {e}")
+
+    return existing_links, existing_fingerprints
+
+
+def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> None:
+    if not apartments:
+        logger.info("No data to save to JSON.")
+        return
+
+    if os.path.exists(filename):
+        with open(filename, "r", encoding="utf-8") as f:
+            existing_data = json.load(f)
+        existing_data.extend(apartments)
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, ensure_ascii=False, indent=2)
+    else:
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(apartments, f, ensure_ascii=False, indent=2)
+
+    logger.info(f"Data saved to JSON: {filename} ({len(apartments)} new records)")
+
+
+def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> None:
+    if not apartments:
+        logger.info("No data to save to CSV.")
+        return
+
+    fieldnames = [
+        "link",
+        "street",
+        "neighborhood",
+        "area",
+        "bedrooms",
+        "bathrooms",
+        "parking",
+        "price",
+        "condo_fee",
+        "iptu",
+    ]
+
+    with open(filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for apt in apartments:
+            row = {field: apt.get(field, "") for field in fieldnames}
+            writer.writerow(row)
+
+    logger.info(f"Data saved to CSV: {filename} ({len(apartments)} new records)")
+
+
+def save_new_apartments_csv(apartments: List[Dict]) -> str: 
+    if not apartments:
+        return ""
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"apartamentos_novos_{timestamp}.csv"
+    save_to_csv(apartments, filename)
+    return filename
