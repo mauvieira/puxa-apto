@@ -1,3 +1,10 @@
+"""Default filters:
+- Bedrooms: 3 or 4
+- Max price: R$ 750.000
+- Min area: 85 m²
+- Amenities: Portaria 24h
+- Location: Curitiba/PR (specific neighborhoods: Água Verde, Batel, Bigorrilho, Portão)
+"""
 
 import logging
 import sys

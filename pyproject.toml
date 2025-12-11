@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "puxa-apto"
 version = "1.0.0"
-description = "Apartment scraper for Brazilian real estate websites"
+description = "Apartment scraper"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
