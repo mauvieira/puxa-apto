@@ -1,23 +1,37 @@
 
+import json
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-import requests
 from bs4 import BeautifulSoup
 
-from ..config import DEFAULT_HEADERS
+from ..utils import web
 
 logger = logging.getLogger(__name__)
+
+_MEDIA_KEY = re.compile(r"/([0-9a-f]{32})/")
+
+
+def _ld_listings(node):
+    """Yield every JSON-LD object that has a listing url and images."""
+    if isinstance(node, dict):
+        if isinstance(node.get("url"), str) and isinstance(node.get("image"), list):
+            yield node
+        for value in node.values():
+            yield from _ld_listings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _ld_listings(value)
 
 
 class BaseScraper(ABC):
 
-    def __init__(self, url: str, headers: Optional[Dict[str, str]] = None):
+    def __init__(self, url: str):
         self.url = url
-        self.headers = headers or DEFAULT_HEADERS
 
     @abstractmethod
     def scrape_apartment(self, element) -> Optional[Dict]:
@@ -46,6 +60,32 @@ class BaseScraper(ABC):
 
         return False
 
+    @staticmethod
+    def link_grouped_cards(soup: BeautifulSoup) -> None:
+        """Give grouped cards their listing URL.
+
+        VivaReal/Zap render a unit advertised by several agencies as one card with href="#"
+        (a modal opens on click). The page's JSON-LD still lists its URL, with the same images.
+        """
+        url_by_media = {}
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string or "")
+            except ValueError:
+                continue
+            for listing in _ld_listings(data):
+                for image in listing["image"]:
+                    match = _MEDIA_KEY.search(image) if isinstance(image, str) else None
+                    if match:
+                        url_by_media.setdefault(match.group(1), listing["url"])
+
+        for card in soup.find_all("a", href="#"):
+            for img in card.find_all("img", src=True):
+                match = _MEDIA_KEY.search(img["src"])
+                if match and match.group(1) in url_by_media:
+                    card["href"] = url_by_media[match.group(1)]
+                    break
+
     def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:
         apartments = []
         page = 1
@@ -55,10 +95,8 @@ class BaseScraper(ABC):
                 current_url = self.get_next_page_url(self.url, page) if page > 1 else self.url
                 logger.info(f"Processing page {page}...")
 
-                response = requests.get(current_url, headers=self.headers, timeout=30)
-                response.raise_for_status()
-
-                soup = BeautifulSoup(response.content, "html.parser")
+                soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                self.link_grouped_cards(soup)
                 listing_elements = self.find_listing_elements(soup)
 
                 if not listing_elements:
@@ -87,7 +125,7 @@ class BaseScraper(ABC):
                 page += 1
                 time.sleep(1)
 
-            except requests.RequestException as e:
+            except web.RequestException as e:
                 logger.error(f"Error making request on page {page}: {e}")
                 break
             except Exception as e:

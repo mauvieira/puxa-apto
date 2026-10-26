@@ -1,0 +1,10 @@
+{
+  "transaction": "aluguel",
+  "state": "RS",
+  "city": "Porto Alegre",
+  "center": {"lat": -30.0400, "lon": -51.2076},
+  "radius_km": 1.2,
+  "neighborhoods": ["Santa Cecília", "Rio Branco", "Bom Fim", "Santana", "Farroupilha", "Independência"],
+  "exclude_neighborhoods": ["Centro Histórico"],
+  "json_file": "famed-ufrgs.json"
+}

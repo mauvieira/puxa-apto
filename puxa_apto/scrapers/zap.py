@@ -17,7 +17,7 @@ class ZapScraper(BaseScraper):
     def scrape_apartment(self, li_element) -> Optional[Dict]:
         try:
             link_elem = li_element.find("a", href=True)
-            if not link_elem:
+            if not link_elem or link_elem["href"] == "#":
                 return None
 
             link = link_elem.get("href", "")
@@ -64,21 +64,18 @@ class ZapScraper(BaseScraper):
             iptu = None
 
             if price_elem:
-                price_p = price_elem.find("p", class_=lambda x: x and "text-2-25" in x)
-                if price_p:
-                    price_text = price_p.get_text(strip=True)
-
-                details_p = price_elem.find(
-                    "p", class_=lambda x: x and "text-1-75" in x and "text-neutral-110" in x
-                )
-                if details_p:
-                    details_text = details_p.get_text(strip=True)
-                    condo_match = re.search(r"Cond\.\s*R\$\s*([\d.]+)", details_text)
-                    iptu_match = re.search(r"IPTU\s*R\$\s*([\d.]+)", details_text)
-                    if condo_match:
-                        condo_fee = extract_price(condo_match.group(0))
-                    if iptu_match:
-                        iptu = extract_price(iptu_match.group(0))
+                first_p = price_elem.find("p")
+                if first_p:
+                    price_match = re.search(r"R\$\s*[\d.,]+", first_p.get_text(" ", strip=True))
+                    if price_match:
+                        price_text = price_match.group(0)
+                details_text = price_elem.get_text(" ", strip=True)
+                condo_match = re.search(r"Cond\.\s*R\$\s*([\d.]+)", details_text)
+                iptu_match = re.search(r"IPTU\s*R\$\s*([\d.]+)", details_text)
+                if condo_match:
+                    condo_fee = extract_price(condo_match.group(0))
+                if iptu_match:
+                    iptu = extract_price(iptu_match.group(0))
 
             price = extract_price(price_text)
 
