@@ -43,10 +43,8 @@ Filters (`max_price`, `max_total`, `min_area`, `bedrooms`, `exclude_neighborhood
 to every scraped listing. `max_total` caps rent plus condo fee (a missing fee counts as 0). The
 price cap and `min_area` are also sent to every site's search, so fewer pages are fetched.
 With places set, listings farther than `radius_km` from all of them are dropped, and so are
-listings without coordinates (their distance is unknown). VivaReal/Zap listings with a hidden
-address (`isApproximateLocation`) count as having no coordinates: their point is a rounded
-placeholder that can be kilometres off. Any other value that couldn't be read (price, area, ...)
-keeps the listing.
+listings without coordinates (their distance is unknown). Any other value that couldn't be read
+(price, area, ...) keeps the listing.
 
 Each saved listing gets `total_price`, `distance_km` (to the nearest place), one
 `distance_km_<place>` per place (e.g. `distance_km_campus_saude`), and, where the site provides
