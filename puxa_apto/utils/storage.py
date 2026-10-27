@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 def load_existing_apartments(
     json_file: str = "apartamentos.json", csv_file: str = "apartamentos.csv"
-) -> Tuple[Set[str], Set[str]]:
+) -> Tuple[Set[str], Set[str], Set[str]]:
     existing_links = set()
     existing_fingerprints = set()
+    existing_refs = set()
 
     if os.path.exists(json_file):
         try:
@@ -26,6 +27,8 @@ def load_existing_apartments(
                     link = apt.get("link", "")
                     if link:
                         existing_links.add(link)
+                    if apt.get("agency_ref"):
+                        existing_refs.add(apt["agency_ref"])
                     fingerprint = create_apartment_fingerprint(apt)
                     if fingerprint:
                         existing_fingerprints.add(fingerprint)
@@ -40,6 +43,8 @@ def load_existing_apartments(
                     link = row.get("link", "")
                     if link:
                         existing_links.add(link)
+                    if row.get("agency_ref"):
+                        existing_refs.add(row["agency_ref"])
 
                     apt_dict = {
                         "street": row.get("street", ""),
@@ -67,7 +72,7 @@ def load_existing_apartments(
         except Exception as e:
             logger.warning(f"Error loading {csv_file}: {e}")
 
-    return existing_links, existing_fingerprints
+    return existing_links, existing_fingerprints, existing_refs
 
 
 def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> None:
@@ -95,6 +100,7 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
 
     fieldnames = [
         "link",
+        "agency_ref",
         "street",
         "neighborhood",
         "area",

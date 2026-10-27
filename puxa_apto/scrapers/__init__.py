@@ -5,6 +5,8 @@ from .vivareal import VivaRealScraper
 from .zap import ZapScraper
 from .chaves import ChavesScraper
 from .imovelweb import ImovelWebScraper
+from .leindecker import LeindeckerScraper
+from .certa import CertaScraper
 
 __all__ = [
     "BaseScraper",
@@ -12,4 +14,6 @@ __all__ = [
     "ZapScraper",
     "ChavesScraper",
     "ImovelWebScraper",
+    "LeindeckerScraper",
+    "CertaScraper",
 ]
