@@ -183,10 +183,11 @@ def test_distances_to_every_reference_point_are_saved_and_the_radius_applies(fak
     assert saved
     for apt in saved:
         assert {"distance_km", *FAMED_PLACE_COLUMNS} <= apt.keys()
-        if apt["distance_km"] is not None:
-            assert apt["distance_km"] == min(apt[c] for c in FAMED_PLACE_COLUMNS)
-            assert apt["distance_km"] <= 1.2
-    assert {site_of(a) for a in saved if a["distance_km"] is not None} == set(SITE_HOSTS)
+        # With places set, a listing whose distance can't be computed isn't known to be near.
+        assert apt["distance_km"] is not None, apt["link"]
+        assert apt["distance_km"] == min(apt[c] for c in FAMED_PLACE_COLUMNS)
+        assert apt["distance_km"] <= 1.2
+    assert {site_of(a) for a in saved} == set(SITE_HOSTS)
     assert {"distance_km", "distance_km_hps", "description"} <= set(csv_header(tmp_path, "out"))
 
 
@@ -246,9 +247,6 @@ def test_porto_alegre_search_returns_agency_listings_with_coordinates_condo_and_
     for host in AGENCY_HOSTS:
         apts = [a for a in saved if site_of(a) == host]
         assert apts, host
-        located = [a for a in apts if a["lat"] is not None and a["distance_km"] is not None]
-        # Leindecker's map lags its newest listings, so only Certa reliably locates most of a page.
-        assert len(located) >= (0.8 * len(apts) if host == "certa.com.br" else 1), host
         detailed = [
             a
             for a in apts

@@ -42,8 +42,9 @@ that site; Leindecker and Certa URLs must end with their page number, e.g. `.../
 Filters (`max_price`, `max_total`, `min_area`, `bedrooms`, `exclude_neighborhoods`) are applied
 to every scraped listing. `max_total` caps rent plus condo fee (a missing fee counts as 0). The
 price cap and `min_area` are also sent to every site's search, so fewer pages are fetched.
-With places set, listings farther than `radius_km` from all of them are dropped. A listing
-whose value couldn't be read (price, coordinates, ...) is kept.
+With places set, listings farther than `radius_km` from all of them are dropped, and so are
+listings without coordinates (their distance is unknown). Any other value that couldn't be read
+(price, area, ...) keeps the listing.
 
 Each saved listing gets `total_price`, `distance_km` (to the nearest place), one
 `distance_km_<place>` per place (e.g. `distance_km_campus_saude`), and, where the site provides

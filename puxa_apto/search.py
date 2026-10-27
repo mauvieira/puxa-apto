@@ -183,8 +183,9 @@ def annotate(apartments: List[Dict], settings: SearchSettings) -> None:
 
 
 def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dict]:
-    """Drop listings whose known values violate the filters or lie beyond radius_km of every
-    place; unknown values are kept."""
+    """Drop listings whose known values violate the filters. With places set, a listing must be
+    within radius_km of one: no coordinates means not known to be near, so it's dropped too.
+    Other unknown values (price, area, ...) are kept."""
     excluded = {slugify(n) for n in settings.exclude_neighborhoods}
 
     def keep(apt: Dict) -> bool:
@@ -192,7 +193,7 @@ def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dic
             return False
         price, area, bedrooms = apt.get("price"), apt.get("area"), apt.get("bedrooms")
         distance, total = apt.get("distance_km"), apt.get("total_price")
-        if settings.places and distance is not None and distance > settings.radius_km:
+        if settings.places and (distance is None or distance > settings.radius_km):
             return False
         if settings.max_price is not None and price is not None and price > settings.max_price:
             return False
