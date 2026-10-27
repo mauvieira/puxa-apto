@@ -101,8 +101,10 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
     fieldnames = [
         "link",
         "agency_ref",
+        "title",
         "street",
         "neighborhood",
+        "city",
         "area",
         "bedrooms",
         "bathrooms",
@@ -115,7 +117,9 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
     ]
     # One distance column per reference place, named after it, in first-seen order.
     fieldnames += dict.fromkeys(k for apt in apartments for k in apt if k.startswith("distance_km_"))
-    fieldnames += ["amenity_codes", "description"]
+    fieldnames += ["approximate_location", "lat", "lon", "amenity_codes", "description", "images"]
+    # Any other field the listings carry, so the CSV holds everything the JSON does.
+    fieldnames += [k for k in dict.fromkeys(k for apt in apartments for k in apt) if k not in fieldnames]
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -128,7 +132,7 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
                 row[field] = ";".join(value) if isinstance(value, list) else value
             writer.writerow(row)
 
-    logger.info(f"Data saved to CSV: {filename} ({len(apartments)} new records)")
+    logger.info(f"Data saved to CSV: {filename} ({len(apartments)} records)")
 
 
 def save_new_apartments_csv(apartments: List[Dict]) -> str: 

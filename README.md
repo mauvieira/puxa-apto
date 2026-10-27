@@ -51,6 +51,8 @@ Each saved listing gets `total_price`, `distance_km` (to the nearest place), one
 them, `description` and raw `amenity_codes` (VivaReal/Zap, e.g. `CONCIERGE_24H`, `GAS_SHOWER`;
 Leindecker/Certa, e.g. `Portaria 24hrs`). Leindecker and Certa listings get their detail page
 fetched (condo fee, IPTU, street, description, amenities), one request each.
+`approximate_location` is `true` when VivaReal/Zap hide the address and only give a rounded
+point; its distances are then estimates, typically within ~100 m but sometimes far off.
 
 ### Overriding a search
 

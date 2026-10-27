@@ -360,3 +360,15 @@ def test_a_fixed_csv_keeps_every_listing_saved_across_runs(fake_sites, tmp_path)
     with open(tmp_path / "out.csv", newline="", encoding="utf-8") as f:
         csv_links = [row["link"] for row in csv.DictReader(f)]
     assert csv_links == [a["link"] for a in saved]
+
+
+def test_listings_whose_portal_hides_the_address_are_flagged_as_approximate(fake_sites, tmp_path):
+    # Zap fixture listings with isApproximateLocation: their point is a rounded placeholder.
+    approximate = ("2902205200", "2918324333", "2918845046", "2919013171", "2919113143")
+    saved = scrape_into(tmp_path, "out", "-C", FAMED, "-m", "1", "-r", "50")
+
+    flagged = {a["link"] for a in saved if a["approximate_location"] is True}
+    assert flagged
+    assert flagged == {a["link"] for a in saved if any(f"id-{i}/" in a["link"] for i in approximate)}
+    assert all(a["approximate_location"] is False for a in saved if a["link"] not in flagged)
+    assert "approximate_location" in csv_header(tmp_path, "out")

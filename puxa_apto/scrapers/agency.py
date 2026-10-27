@@ -56,6 +56,7 @@ def new_apartment(**fields) -> Dict:
         "description": "",
         "amenity_codes": [],
         "agency_ref": None,
+        "approximate_location": False,
     }
     apartment.update(fields)
     return apartment

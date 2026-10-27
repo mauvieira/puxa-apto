@@ -74,8 +74,11 @@ def agency_ref(advertiser: Optional[str], external_id: Optional[str]) -> Optiona
 
 
 def merge_details(apartment: Dict, details: Dict[str, Dict]) -> None:
-    """Give the apartment its page details (coordinates, description, amenity codes, agency_ref)."""
-    apartment.update(lat=None, lon=None, description="", amenity_codes=[], agency_ref=None)
+    """Give the apartment its page details (coordinates, description, amenity codes, agency_ref,
+    approximate_location)."""
+    apartment.update(
+        lat=None, lon=None, description="", amenity_codes=[], agency_ref=None, approximate_location=False
+    )
     apartment.update(details.get(listing_id(apartment["link"]) or "", {}))
 
 
@@ -205,6 +208,8 @@ class BaseScraper(ABC):
                     "description": description if isinstance(description, str) else "",
                     "amenity_codes": [str(v) for v in values] if isinstance(values, list) else [],
                     "agency_ref": agency_ref(_dig(obj, "advertiser", "name"), obj.get("externalId")),
+                    # Hidden address: the portal gives a rounded placeholder point, not the flat's.
+                    "approximate_location": _dig(obj, "address", "isApproximateLocation") is True,
                 }
                 lat = _dig(obj, "address", "coordinates", "latitude")
                 lon = _dig(obj, "address", "coordinates", "longitude")
