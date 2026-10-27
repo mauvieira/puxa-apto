@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 import re
@@ -359,3 +360,13 @@ def test_a_portal_copy_saved_before_agency_refs_existed_still_blocks_the_agency_
     added = json.loads(out.read_text(encoding="utf-8"))[len(legacy):]
     assert added
     assert not portal_refs & {a["agency_ref"] for a in added}
+
+
+def test_a_fixed_csv_keeps_every_listing_saved_across_runs(fake_sites, tmp_path):
+    first = scrape_into(tmp_path, "out", "-C", FAMED, "-m", "1", "-r", "50", "--skip-zap")
+    saved = scrape_into(tmp_path, "out", "-C", FAMED, "-m", "1", "-r", "50")
+
+    assert len(saved) > len(first)
+    with open(tmp_path / "out.csv", newline="", encoding="utf-8") as f:
+        csv_links = [row["link"] for row in csv.DictReader(f)]
+    assert csv_links == [a["link"] for a in saved]

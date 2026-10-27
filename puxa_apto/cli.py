@@ -19,7 +19,7 @@ from .scrapers import (
 )
 from .settings import load_settings
 from .utils.fingerprint import drop_cross_posts, filter_new_apartments
-from .utils.storage import load_existing_apartments, save_new_apartments_csv, save_to_json
+from .utils.storage import load_existing_apartments, save_new_apartments_csv, save_to_csv, save_to_json
 
 app = typer.Typer(help="Apartment scraper")
 console = Console()
@@ -106,7 +106,9 @@ def scrape(
         None, "--json", "-j", help="Output JSON file path (default: apartamentos.json)"
     ),
     csv_file: Optional[str] = typer.Option(
-        None, "--csv", help="Output CSV file path (default: timestamped)"
+        None,
+        "--csv",
+        help="CSV mirror of the whole JSON file, rewritten each run (default: a timestamped CSV of this run's new listings)",
     ),
     max_pages: Optional[int] = typer.Option(
         None, "--max-pages", "-m", help="Maximum number of pages to scrape per URL"
@@ -235,13 +237,12 @@ def scrape(
     console.print(f"Duplicates filtered: [yellow]{len(matching) - len(new_apartments)}[/yellow]\n")
 
     if new_apartments:
-        save_to_json(new_apartments, settings.json_file)
+        saved = save_to_json(new_apartments, settings.json_file)
         console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
 
         if settings.csv_file:
-            from .utils.storage import save_to_csv
-            save_to_csv(new_apartments, settings.csv_file)
-            console.print(f"Data saved to CSV: [green]{settings.csv_file}[/green]")
+            save_to_csv(saved, settings.csv_file)
+            console.print(f"Data saved to CSV: [green]{settings.csv_file}[/green] ({len(saved)} listings)")
         else:
             csv_filename = save_new_apartments_csv(new_apartments)
             if csv_filename:

@@ -75,22 +75,22 @@ def load_existing_apartments(
     return existing_links, existing_fingerprints, existing_refs
 
 
-def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> None:
-    if not apartments:
-        logger.info("No data to save to JSON.")
-        return
-
+def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> List[Dict]:
+    """Append to the JSON file (the accumulated history) and return its full contents."""
+    saved = []
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
-            existing_data = json.load(f)
-        existing_data.extend(apartments)
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=2)
-    else:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(apartments, f, ensure_ascii=False, indent=2)
+            saved = json.load(f)
+    if not apartments:
+        logger.info("No data to save to JSON.")
+        return saved
+
+    saved.extend(apartments)
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(saved, f, ensure_ascii=False, indent=2)
 
     logger.info(f"Data saved to JSON: {filename} ({len(apartments)} new records)")
+    return saved
 
 
 def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> None:
