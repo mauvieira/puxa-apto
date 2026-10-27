@@ -9,10 +9,16 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from .utils.text import slugify
+
 
 class Point(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
+
+
+class Place(Point):
+    name: str = Field(min_length=1)
 
 
 class SiteUrls(BaseModel):
@@ -23,7 +29,7 @@ class SiteUrls(BaseModel):
 
 
 class SearchSettings(BaseSettings):
-    """One search: a map area (VivaReal/Zap), neighborhoods (Chaves/ImovelWeb) and filters.
+    """One search: reference places (VivaReal/Zap map), neighborhoods (Chaves/ImovelWeb) and filters.
 
     Precedence: init kwargs (CLI flags) > PUXA_* env vars > .env > JSON config file > defaults.
     """
@@ -36,11 +42,12 @@ class SearchSettings(BaseSettings):
     transaction: Literal["aluguel", "venda"] = "venda"
     state: Optional[str] = None  # UF, e.g. "RS"
     city: Optional[str] = None  # e.g. "Porto Alegre"
-    center: Optional[Point] = None
+    places: List[Place] = []  # reference points; listings beyond radius_km of all of them are dropped
     radius_km: float = Field(1.2, gt=0)
     neighborhoods: List[str] = []
     exclude_neighborhoods: List[str] = []
     max_price: Optional[float] = None
+    max_total: Optional[float] = Field(None, gt=0)  # rent + condo fee; a missing fee counts as 0
     min_area: Optional[int] = None
     bedrooms: List[int] = []
     urls: SiteUrls = SiteUrls()  # explicit per-site URLs; replace the built ones
@@ -49,9 +56,17 @@ class SearchSettings(BaseSettings):
     csv_file: Optional[str] = None
 
     @model_validator(mode="after")
-    def _neighborhoods_need_place(self) -> "SearchSettings":
+    def _consistent(self) -> "SearchSettings":
         if self.neighborhoods and not (self.state and self.city):
             raise ValueError("state and city are required when neighborhoods are set")
+        slugs = set()
+        for place in self.places:
+            slug = slugify(place.name)
+            if not slug:
+                raise ValueError(f"place name needs letters or digits: {place.name!r}")
+            if slug in slugs:
+                raise ValueError(f"place names must be unique: {place.name!r}")
+            slugs.add(slug)
         return self
 
     @classmethod

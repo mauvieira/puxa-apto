@@ -1,4 +1,5 @@
 
+import json
 import logging
 import re
 import time
@@ -9,7 +10,7 @@ from bs4 import BeautifulSoup
 
 from ..utils import web
 from ..utils.extractors import extract_number, extract_price
-from .base import BaseScraper
+from .base import BaseScraper, _dig, _walk, merge_details, valid_point
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,29 @@ class ImovelWebScraper(BaseScraper):
             logger.error(f"Error processing ImovelWeb apartment: {e}")
             return None
 
+    def page_details(self, soup: BeautifulSoup) -> Dict[str, Dict]:
+        """Coordinates and description per posting id, from `window.__PRELOADED_STATE__`."""
+        script = soup.find("script", id="preloadedData")
+        source = (script.string or "") if script else ""
+        try:
+            state, _ = json.JSONDecoder().raw_decode(source, source.index("{"))
+        except ValueError:
+            return {}
+
+        details: Dict[str, Dict] = {}
+        for obj in _walk(state):
+            location = obj.get("postingLocation")
+            if not (obj.get("postingId") and isinstance(location, dict)):
+                continue
+            description = obj.get("descriptionNormalized")
+            entry = {"description": description if isinstance(description, str) else ""}
+            geolocation = _dig(location, "postingGeolocation", "geolocation")
+            lat, lon = _dig(geolocation, "latitude"), _dig(geolocation, "longitude")
+            if valid_point(lat, lon):
+                entry.update(lat=lat, lon=lon)
+            details[str(obj["postingId"])] = entry
+        return details
+
     def find_listing_elements(self, soup: BeautifulSoup) -> List:
         listing_elements = soup.find_all("div", {"data-qa": "posting PROPERTY"})
 
@@ -196,6 +220,7 @@ class ImovelWebScraper(BaseScraper):
                 logger.info(f"Processing page {page} of ImovelWeb...")
 
                 soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                details = self.page_details(soup)
                 listing_elements = self.find_listing_elements(soup)
                 current_count = len(listing_elements)
 
@@ -210,6 +235,7 @@ class ImovelWebScraper(BaseScraper):
                 for div_elem in listing_elements:
                     apartment = self.scrape_apartment(div_elem)
                     if apartment:
+                        merge_details(apartment, details)
                         link = apartment.get("link", "")
                         if link and link not in seen_links:
                             seen_links.add(link)

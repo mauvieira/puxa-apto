@@ -2,9 +2,11 @@
   "transaction": "aluguel",
   "state": "RS",
   "city": "Porto Alegre",
-  "center": {"lat": -30.0400, "lon": -51.2076},
+  "places": [
+    {"name": "Famed", "lat": -30.0400303, "lon": -51.2075511}
+  ],
   "radius_km": 1.2,
-  "neighborhoods": ["Santa Cecília", "Rio Branco", "Bom Fim", "Santana", "Farroupilha", "Independência"],
+  "neighborhoods": ["Santa Cecília", "Rio Branco", "Bom Fim", "Santana", "Farroupilha", "Independência", "Moinhos de Vento", "Jardim Botânico"],
   "exclude_neighborhoods": ["Centro Histórico"],
-  "json_file": "famed-ufrgs.json"
+  "json_file": "famed-ufrgs-v2.json"
 }

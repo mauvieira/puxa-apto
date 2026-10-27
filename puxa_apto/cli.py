@@ -28,12 +28,15 @@ SCRAPERS = {
 }
 
 
-def _parse_center(value: str) -> dict:
+def _parse_place(value: str) -> dict:
+    name, sep, coords = value.rpartition("=")
     try:
-        lat, lon = (float(part) for part in value.split(","))
+        if not sep or not name.strip():
+            raise ValueError(value)
+        lat, lon = (float(part) for part in coords.split(","))
     except ValueError:
-        raise typer.BadParameter("expected LAT,LON, e.g. -30.0400,-51.2076", param_hint="--center")
-    return {"lat": lat, "lon": lon}
+        raise typer.BadParameter("expected NAME=LAT,LON, e.g. HCPA=-30.0387,-51.2066", param_hint="--place")
+    return {"name": name.strip(), "lat": lat, "lon": lon}
 
 
 @app.command()
@@ -48,11 +51,13 @@ def scrape(
     transaction: Optional[str] = typer.Option(
         None, "--transaction", "-t", help="aluguel or venda"
     ),
-    center: Optional[str] = typer.Option(
-        None, "--center", help="Map center for VivaReal/Zap, e.g. --center=-30.0400,-51.2076"
+    place: Optional[List[str]] = typer.Option(
+        None,
+        "--place",
+        help="Reference point NAME=LAT,LON, e.g. HCPA=-30.0387,-51.2066 (repeatable; replaces the config's places)",
     ),
     radius_km: Optional[float] = typer.Option(
-        None, "--radius-km", "-r", help="Map search radius around --center, in km"
+        None, "--radius-km", "-r", help="Keep listings within this many km of any place"
     ),
     neighborhood: Optional[List[str]] = typer.Option(
         None, "--neighborhood", "-b", help="Neighborhood for Chaves/ImovelWeb (repeatable)"
@@ -61,6 +66,7 @@ def scrape(
         None, "--exclude-neighborhood", "-x", help="Drop listings in this neighborhood (repeatable)"
     ),
     max_price: Optional[float] = typer.Option(None, "--max-price", "-p", help="Maximum price"),
+    max_total: Optional[float] = typer.Option(None, "--max-total", "-T", help="Maximum rent + condo fee"),
     min_area: Optional[int] = typer.Option(None, "--min-area", "-a", help="Minimum area in m²"),
     bedrooms: Optional[List[int]] = typer.Option(
         None, "--bedrooms", "-q", help="Accepted bedroom count (repeatable)"
@@ -102,11 +108,12 @@ def scrape(
 
     flags = {
         "transaction": transaction,
-        "center": _parse_center(center) if center is not None else None,
+        "places": [_parse_place(v) for v in place] if place else None,
         "radius_km": radius_km,
         "neighborhoods": neighborhood,
         "exclude_neighborhoods": exclude_neighborhood,
         "max_price": max_price,
+        "max_total": max_total,
         "min_area": min_area,
         "bedrooms": bedrooms,
         "max_pages": max_pages,
@@ -130,7 +137,7 @@ def scrape(
     }
     if not any(site_urls.values()):
         console.print(
-            "[red]Nothing to search: configure center or neighborhoods (see buscas/*.json), "
+            "[red]Nothing to search: configure places or neighborhoods (see buscas/*.json), "
             "or pass a site URL.[/red]"
         )
         raise typer.Exit(code=2)
@@ -152,7 +159,7 @@ def scrape(
         label, scraper_cls = SCRAPERS[site]
         if not urls:
             console.print(
-                f"[yellow]Skipping {label}: nothing to search (set center for VivaReal/Zap, "
+                f"[yellow]Skipping {label}: nothing to search (set places for VivaReal/Zap, "
                 "neighborhoods for Chaves/ImovelWeb, or pass a URL)[/yellow]\n"
             )
             continue
@@ -172,6 +179,7 @@ def scrape(
     console.print(f"[bold]Total apartments found:[/bold] [green]{len(all_apartments)}[/green]")
     console.print(f"{'='*50}\n")
 
+    search.annotate(all_apartments, settings)
     matching = search.apply_criteria(all_apartments, settings)
     console.print(
         f"Matching criteria: [green]{len(matching)}[/green] "

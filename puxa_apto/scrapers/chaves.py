@@ -1,4 +1,5 @@
 
+import json
 import logging
 import re
 import time
@@ -9,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from ..utils import web
 from ..utils.extractors import extract_number, extract_price
+from .base import _walk, listing_id, merge_details, valid_point
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,28 @@ class ChavesScraper:
             if segment:
                 template.replace_with(segment.extract())
 
+    @staticmethod
+    def page_details(soup: BeautifulSoup) -> Dict[str, Dict]:
+        """Coordinates per listing id, from the JSON-LD `Apartment` objects' `geo`."""
+        details: Dict[str, Dict] = {}
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string or "")
+            except ValueError:
+                continue
+            for obj in _walk(data):
+                geo = obj.get("geo")
+                if obj.get("@type") != "Apartment" or not isinstance(geo, dict):
+                    continue
+                ident = listing_id(str(obj.get("@id") or ""))
+                try:
+                    lat, lon = float(geo.get("latitude")), float(geo.get("longitude"))
+                except (TypeError, ValueError):
+                    continue
+                if ident and valid_point(lat, lon):
+                    details[ident] = {"lat": lat, "lon": lon}
+        return details
+
     def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:
         apartments = []
         page = 1
@@ -183,6 +207,7 @@ class ChavesScraper:
 
                 soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
                 self.inline_streamed_segments(soup)
+                details = self.page_details(soup)
 
                 listing_elements = soup.find_all("div", {"data-template": "list"})
                 current_count = len(listing_elements)
@@ -197,6 +222,7 @@ class ChavesScraper:
                 for div_elem in listing_elements:
                     apartment = self.scrape_apartment(div_elem)
                     if apartment:
+                        merge_details(apartment, details)
                         link = apartment.get("link", "")
                         if not any(apt.get("link") == link for apt in apartments):
                             page_apartments.append(apartment)
