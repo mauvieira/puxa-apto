@@ -191,6 +191,16 @@ def test_distances_to_every_reference_point_are_saved_and_the_radius_applies(fak
     assert {"distance_km", "distance_km_hps", "description"} <= set(csv_header(tmp_path, "out"))
 
 
+def test_a_portal_listing_with_only_an_approximate_location_is_not_treated_as_near(fake_sites, tmp_path):
+    # Zap fixture listings flagged isApproximateLocation (address hidden): their point is a
+    # rounded placeholder that can sit kilometres from the flat.
+    approximate = ("2902205200", "2918324333", "2918845046", "2919013171", "2919113143")
+    wide = scrape_into(tmp_path, "wide", "-C", FAMED, "-m", "1", "-r", "50")
+
+    assert any(site_of(a) == "zapimoveis.com.br" for a in wide)
+    assert not [a["link"] for a in wide if any(i in a["link"] for i in approximate)]
+
+
 def test_place_flag_replaces_the_configured_points(fake_sites, tmp_path):
     saved = scrape_into(tmp_path, "out", "-C", FAMED, "-m", "1", "--place", "HPS=-30.0369333,-51.2098087")
 

@@ -208,7 +208,8 @@ class BaseScraper(ABC):
                 }
                 lat = _dig(obj, "address", "coordinates", "latitude")
                 lon = _dig(obj, "address", "coordinates", "longitude")
-                if valid_point(lat, lon):
+                # Hidden-address listings get a rounded placeholder point, sometimes km away.
+                if valid_point(lat, lon) and not _dig(obj, "address", "isApproximateLocation"):
                     entry.update(lat=lat, lon=lon)
                 # A listing can appear in several rows; keep the first non-empty value per field.
                 known = details.setdefault(str(obj["id"]), {})
