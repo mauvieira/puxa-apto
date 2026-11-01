@@ -6,13 +6,13 @@ from curl_cffi.requests.exceptions import RequestException
 
 from ..config import DEFAULT_HEADERS
 
-__all__ = ["fetch_page", "RequestException"]
+__all__ = ["RequestException", "fetch_page"]
 
 PROFILES = ("chrome", "safari")
 _profile_by_host: Dict[str, str] = {}
 
 
-def fetch_page(url: str) -> bytes:
+def fetch_page(url: str) -> bytes:  # pyright: ignore[reportReturnType] -- baseline: predates type checking
     """Fetch with a browser TLS fingerprint; Cloudflare blocks some fingerprints per site."""
     host = urlsplit(url).hostname or ""
     remembered = _profile_by_host.get(host)

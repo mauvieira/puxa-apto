@@ -122,7 +122,7 @@ class AgencyScraper(ABC):
     def _page(self, html: str, seen: Set[str]) -> List[Dict]:
         points = map_points(html)
         apartments = []
-        for card in BeautifulSoup(html, "html.parser").select(self.card_selector):
+        for card in BeautifulSoup(html, "lxml").select(self.card_selector):
             apartment = self._listing(card, points)
             if apartment is None or apartment["link"] in seen:
                 continue
@@ -148,7 +148,7 @@ class AgencyScraper(ABC):
 
     def _details(self, link: str) -> Dict:
         try:
-            return self.parse_detail(BeautifulSoup(web.fetch_page(link), "html.parser"))
+            return self.parse_detail(BeautifulSoup(web.fetch_page(link), "lxml"))
         except Exception as e:
             logger.warning(f"Error reading listing {link}: {e}")
             return {}

@@ -12,7 +12,7 @@ from .fingerprint import create_apartment_fingerprint
 logger = logging.getLogger(__name__)
 
 
-def load_existing_apartments(
+def load_existing_apartments(  # sensors: complexity=19, nesting=5 -- baseline: predates sensors; lower via refactor-tick
     json_file: str = "apartamentos.json", csv_file: str = "apartamentos.csv"
 ) -> Tuple[Set[str], Set[str], Set[str]]:
     existing_links = set()
@@ -93,7 +93,7 @@ def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") ->
     return saved
 
 
-def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> None:
+def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> None:  # sensors: complexity=12 -- baseline: predates sensors; lower via refactor-tick
     if not apartments:
         logger.info("No data to save to CSV.")
         return

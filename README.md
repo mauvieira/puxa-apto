@@ -12,8 +12,10 @@ python -m venv .venv
 
 ```bash
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/python -m pytest      # offline; the network is replaced by tests/fixtures
+.venv/bin/python -m pytest -n auto  # offline; the network is replaced by tests/fixtures
 ```
+
+Code-quality sensors and agent workflow: see AGENTS.md.
 
 ## Usage
 
