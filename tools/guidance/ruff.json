@@ -1,0 +1,55 @@
+{
+  "_about": "Self-correction guidance for ruff findings, keyed by rule code. A code missing here falls back to its family (the leading letters: F, E, B, SIM, RUF, PERF). tools/ruff_sensor.py ships only the entries for rules that fired. Run `.venv/bin/ruff rule <CODE>` for ruff's own explanation.",
+
+  "F401": "Unused import. Delete it. If the module re-exports the name on purpose, list it in `__all__` instead of suppressing.",
+  "F811": "A name is defined twice and the first definition is dead. Delete the stale one; if both are needed, give them different names.",
+  "F821": "Undefined name: this line raises NameError when it runs. Usually a typo, a missing import, or a variable used outside the branch that assigns it.",
+  "F841": "A local variable is assigned and never read. Delete the assignment, or use the value. When unpacking, name the unused part `_`.",
+  "F": "Pyflakes found code that is dead or broken at runtime (unused or undefined names, redefinitions, bad format strings). Fix the code, do not suppress: these are almost never false positives.",
+
+  "E401": "Several modules imported on one line. Put each import on its own line.",
+  "E402": "Import not at the top of the module. Move it up with the other imports. If it truly must run after setup code, suppress it with that reason: `# noqa: E402 -- <what must run first>`.",
+  "E711": "Comparison to None with `==`/`!=`. Use `is None` / `is not None`; `==` can be overridden and lies.",
+  "E712": "Comparison to True/False with `==`. Test the value directly (`if flag:`), or use `is True` only when the type really can be something other than bool.",
+  "E721": "Type comparison with `==`. Use `isinstance(x, T)`, which also accepts subclasses.",
+  "E722": "Bare `except:` also swallows KeyboardInterrupt and SystemExit. Catch the specific exceptions this code can recover from. In a per-listing scraper loop, `except Exception` plus a logged warning is the house pattern.",
+  "E731": "A lambda assigned to a name. Write a `def`: it gets a real name in tracebacks and can carry a docstring.",
+  "E741": "Ambiguous name (`l`, `O`, `I`) that reads like 1 or 0. Rename it to say what it holds.",
+  "E": "pycodestyle error (statement layout, imports, comparisons). Apply the fix ruff suggests; these are mechanical.",
+
+  "B006": "Mutable default argument: the same list/dict is shared by every call and accumulates state. Default to None and create the object inside the function.",
+  "B007": "Loop variable is never used in the body. Rename it to `_` (or `_name`) so the reader knows it is ignored on purpose.",
+  "B008": "Function call in a default argument runs once, at import time, not per call. Typer's `typer.Option`/`typer.Argument` are already exempt in pyproject.toml; for anything else, default to None and call inside.",
+  "B009": "`getattr(obj, \"name\")` with a constant name is just `obj.name`. Write the attribute access.",
+  "B011": "`assert False` disappears under `python -O`. Raise an exception (`raise AssertionError(...)` or a specific error).",
+  "B017": "`pytest.raises(Exception)` passes on any error, including the bug you are testing for. Raise and expect the specific exception type.",
+  "B018": "A statement whose value is computed and thrown away. Usually a forgotten `return`, `assert`, or call parentheses.",
+  "B023": "A closure inside a loop captures the loop variable by reference, so every closure sees its last value. Bind it as a default argument (`lambda x, item=item: ...`) or build the function outside the loop.",
+  "B904": "`raise` inside `except` without `from`. Use `raise NewError(...) from err` to keep the original cause in the traceback, or `from None` when the original error is noise for the user (e.g. a clean CLI message).",
+  "B905": "`zip()` without `strict=`. If both sequences must have the same length, pass `strict=True` so a mismatch fails loudly instead of silently truncating; pass `strict=False` only when truncation is intended.",
+  "B": "flake8-bugbear found a likely bug or a design trap (shared mutable state, swallowed exceptions, late-binding closures). Read `.venv/bin/ruff rule <CODE>` and fix the cause; suppress only with a concrete reason.",
+
+  "SIM102": "Nested `if` with no other statements: merge the conditions with `and`. One fewer nesting level.",
+  "SIM103": "`if cond: return True / return False`. Return the condition (wrapped in `bool(...)` if it is not already a bool).",
+  "SIM105": "`try/except: pass` to ignore one error. Use `contextlib.suppress(SpecificError)`, which states the intent in one line.",
+  "SIM108": "`if/else` that only assigns one variable. Use a conditional expression, unless it would exceed one readable line.",
+  "SIM110": "A loop that returns True on the first match. Use `any(...)` (or `all(...)` for the inverse).",
+  "SIM118": "`key in d.keys()` builds a view for nothing. Write `key in d`.",
+  "SIM201": "`not a == b`. Write `a != b`.",
+  "SIM": "flake8-simplify: the same logic can be written with fewer branches or names. Apply the simplification; it lowers complexity for the reader and for the `shape` sensor.",
+
+  "RUF005": "List concatenation with `+` to build a new list. Use unpacking: `[*items, extra]`.",
+  "RUF010": "`str()`/`repr()` inside an f-string. Use the conversion flag: `f\"{x!r}\"`.",
+  "RUF012": "Mutable class attribute default is shared by all instances. Annotate it as `ClassVar[...]` if that is intended, otherwise set it in `__init__` or use a dataclass `field(default_factory=...)`.",
+  "RUF013": "Parameter defaults to None but its annotation is not Optional. Annotate it `X | None` (or `Optional[X]`) so pyright checks the None case.",
+  "RUF015": "`list(x)[0]` builds a whole list to read one item. Use `next(iter(x))`.",
+  "RUF022": "`__all__` is not sorted. Run `ruff check --fix`; a sorted `__all__` makes merges and reviews trivial.",
+  "RUF100": "A `# noqa` that no longer suppresses anything. Delete it (or the stale code in it). Stale suppressions hide the next real finding on that line.",
+  "RUF": "Ruff-specific rule (stale suppressions, Optional annotations, unsorted __all__, mutable class attributes). Apply the fix; `ruff check --fix` handles many of them.",
+
+  "PERF401": "A loop that only appends to a list. Use a list comprehension (or `list.extend` with a generator): faster and one expression to read.",
+  "PERF102": "Iterating `d.items()` but using only keys or only values. Iterate `d` or `d.values()`.",
+  "PERF": "Perflint: a loop pattern with a faster idiomatic form. Apply it unless the loop body is doing more than the rule assumes.",
+
+  "suppression": "When a finding is genuinely wrong at this spot, suppress it on that line with a reason: `# noqa: CODE -- <why the rule does not apply here>`. The `shape` sensor fails any suppression without ` -- reason`, and RUF100 flags it once it stops suppressing anything."
+}
