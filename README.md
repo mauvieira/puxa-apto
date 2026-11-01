@@ -42,6 +42,10 @@ fetched (condo fee, IPTU, street, description, amenities), one request each.
 `approximate_location` is `true` when VivaReal/Zap hide the address and only give a rounded
 point; its distances are then estimates, typically within ~100 m but sometimes far off.
 
+Add `--xlsx busca.xlsx` (or `"xlsx_file"` in the search) to get each run's new listings as a
+filterable Excel sheet; `puxa-apto export-xlsx <file.json|file.csv> -o busca.xlsx` converts
+listings already saved. See [docs/configuration.md](docs/configuration.md#xlsx_file).
+
 ## Adding a site
 
 1. Write `puxa_apto/scrapers/<key>.py`. A portal subclasses `BaseScraper` and implements

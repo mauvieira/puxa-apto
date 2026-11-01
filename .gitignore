@@ -1,6 +1,7 @@
 *.pyc
 *.csv
 *.json
+*.xlsx
 *.log
 .venv/
 *.egg-info/

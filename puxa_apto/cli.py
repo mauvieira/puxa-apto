@@ -1,5 +1,6 @@
 import inspect
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -10,10 +11,18 @@ from rich.table import Table
 
 from . import search
 from .config import setup_logging
-from .settings import load_settings
+from .settings import SearchSettings, load_settings
 from .sites import SITES, resolve_urls
 from .utils.fingerprint import drop_cross_posts, filter_new_apartments
 from .utils.storage import append_to_csv, load_existing_apartments, save_new_apartments_csv, save_to_json
+from .xlsx import (
+    SheetOptions,
+    XlsxExportError,
+    append_listings_sheet,
+    check_workbook,
+    read_listings,
+    sheet_title,
+)
 
 app = typer.Typer(help="Apartment scraper")
 console = Console()
@@ -44,6 +53,31 @@ def _save_csv(new_apartments: List[Dict], csv_file: Optional[str]) -> None:
         console.print(f"Data appended to CSV: [green]{written}[/green] ({len(new_apartments)} listings)")
     else:
         console.print(f"[yellow]{csv_file} has different columns; new listings saved to {written}[/yellow]")
+
+
+def _place_labels(settings: Optional[SearchSettings]) -> Dict[str, str]:
+    """distance_km_<slug> key -> place name, labelling the sheet's distance columns."""
+    return {search.distance_column(p): p.name for p in settings.places} if settings else {}
+
+
+def _save_outputs(new_apartments: List[Dict], settings: SearchSettings) -> None:
+    """Save this run's new listings. The Excel sheet goes first: if it fails, nothing is saved,
+    so the listings aren't recorded as seen in the JSON history and a rerun retries them."""
+    if settings.xlsx_file:
+        options = SheetOptions(sheet_title(settings), _place_labels(settings), datetime.now().strftime("%d-%m"))
+        try:
+            sheet = append_listings_sheet(Path(settings.xlsx_file), new_apartments, options)
+        except (XlsxExportError, OSError) as e:
+            console.print(f"[red]Excel export failed: {e}. Nothing was saved; rerun to retry.[/red]")
+            raise typer.Exit(code=1) from e
+        console.print(
+            f'Sheet "{sheet}" added to [green]{settings.xlsx_file}[/green] ({len(new_apartments)} listings)'
+        )
+    save_to_json(new_apartments, settings.json_file)
+    console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
+    # --xlsx replaces the default timestamped CSV; an explicit --csv still gets written.
+    if settings.csv_file or not settings.xlsx_file:
+        _save_csv(new_apartments, settings.csv_file)
 
 
 def _with_site_flags(command):
@@ -78,7 +112,7 @@ def _with_site_flags(command):
 
 @app.command()
 @_with_site_flags
-def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements=70 -- baseline: predates sensors; lower via refactor-tick
+def scrape(  # sensors: function-lines=124, complexity=24, params=15, statements=42 -- baseline: predates sensors; lower via refactor-tick
     config: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -117,6 +151,9 @@ def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements
         "--csv",
         help="CSV that each run appends its new listings to; never rewritten (default: a timestamped CSV of this run's new listings)",
     ),
+    xlsx_file: Optional[str] = typer.Option(
+        None, "--xlsx", help="Excel workbook each run adds a sheet of its new listings to (created if missing)"
+    ),
     max_pages: Optional[int] = typer.Option(
         None, "--max-pages", "-m", help="Maximum number of pages to scrape per URL"
     ),
@@ -144,6 +181,7 @@ def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements
         "max_pages": max_pages,
         "json_file": json_file,
         "csv_file": csv_file,
+        "xlsx_file": xlsx_file,
     }
     overrides = {k: v for k, v in flags.items() if v is not None and v != [] and v != ()}
 
@@ -152,6 +190,12 @@ def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements
     except ValidationError as e:
         console.print(f"[red]Invalid configuration:[/red]\n{e}")
         raise typer.Exit(code=2) from e
+    if settings.xlsx_file:
+        try:
+            check_workbook(Path(settings.xlsx_file))
+        except XlsxExportError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=2) from e
 
     site_urls = {
         key: resolve_urls(key, settings, list(site_flags[f"{key}_url"] or []))
@@ -176,26 +220,7 @@ def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements
         f"[green]{len(existing_fingerprints)}[/green] unique fingerprints already saved.\n"
     )
 
-    all_apartments = []
-
-    for key, urls in site_urls.items():
-        site = SITES[key]
-        if not urls:
-            console.print(
-                f"[yellow]Skipping {site.label}: nothing to search (needs {site.needs}, or pass --{key}-url)[/yellow]\n"
-            )
-            continue
-
-        console.print(f"[bold cyan]{site.label}[/bold cyan]")
-        console.print("=" * 50)
-        for url in urls:
-            try:
-                apartments = site.scraper(url).scrape(max_pages=settings.max_pages)
-                all_apartments.extend(apartments)
-                console.print(f"Found [green]{len(apartments)}[/green] apartments\n")
-            except Exception as e:
-                logger.error(f"Error scraping {site.label}: {e}")
-                console.print(f"[red]Error scraping {site.label}: {e}[/red]\n")
+    all_apartments = _scrape_sites(site_urls, settings.max_pages)
 
     console.print(f"\n[bold]{'='*50}[/bold]")
     console.print(f"[bold]Total apartments found:[/bold] [green]{len(all_apartments)}[/green]")
@@ -221,41 +246,96 @@ def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements
     console.print(f"Duplicates filtered: [yellow]{len(matching) - len(new_apartments)}[/yellow]\n")
 
     if new_apartments:
-        save_to_json(new_apartments, settings.json_file)
-        console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
-        _save_csv(new_apartments, settings.csv_file)
-
-        console.print("\n[bold]--- First 3 new apartments ---[/bold]")
-        for i, apt in enumerate(new_apartments[:3], 1):
-            table = Table(title=f"Apartment {i}", show_header=True, header_style="bold magenta")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-
-            table.add_row("Street", apt.get("street", "N/A"))
-            table.add_row("Neighborhood", apt.get("neighborhood", "N/A"))
-            table.add_row("City", apt.get("city", "N/A"))
-            table.add_row("Area", f"{apt.get('area', 'N/A')} m²")
-            table.add_row("Bedrooms", str(apt.get("bedrooms", "N/A")))
-            table.add_row("Bathrooms", str(apt.get("bathrooms", "N/A")))
-            table.add_row("Parking", str(apt.get("parking", "N/A")))
-            table.add_row(
-                "Price",
-                f"R$ {apt.get('price', 0):,.2f}" if apt.get("price") else "N/A",
-            )
-            table.add_row(
-                "Condo Fee",
-                f"R$ {apt.get('condo_fee', 0):,.2f}" if apt.get("condo_fee") else "N/A",
-            )
-            table.add_row(
-                "IPTU",
-                f"R$ {apt.get('iptu', 0):,.2f}" if apt.get("iptu") else "N/A",
-            )
-            table.add_row("Link", apt.get("link", "N/A"))
-
-            console.print(table)
-            console.print()
+        _save_outputs(new_apartments, settings)
+        _print_preview(new_apartments)
     else:
         console.print("[yellow]No new apartments found.[/yellow]")
+
+
+def _scrape_sites(site_urls: Dict[str, List[str]], max_pages: Optional[int]) -> List[Dict]:
+    """Every listing the sites' scrapers return for their URLs; a failing URL is logged and skipped."""
+    all_apartments: List[Dict] = []
+    for key, urls in site_urls.items():
+        site = SITES[key]
+        if not urls:
+            console.print(
+                f"[yellow]Skipping {site.label}: nothing to search (needs {site.needs}, or pass --{key}-url)[/yellow]\n"
+            )
+            continue
+
+        console.print(f"[bold cyan]{site.label}[/bold cyan]")
+        console.print("=" * 50)
+        for url in urls:
+            try:
+                apartments = site.scraper(url).scrape(max_pages=max_pages)
+                all_apartments.extend(apartments)
+                console.print(f"Found [green]{len(apartments)}[/green] apartments\n")
+            except Exception as e:
+                logger.error(f"Error scraping {site.label}: {e}")
+                console.print(f"[red]Error scraping {site.label}: {e}[/red]\n")
+    return all_apartments
+
+
+def _money(value) -> str:
+    return f"R$ {value:,.2f}" if value else "N/A"
+
+
+def _print_preview(new_apartments: List[Dict]) -> None:
+    """One table per listing for the first three new ones."""
+    console.print("\n[bold]--- First 3 new apartments ---[/bold]")
+    for i, apt in enumerate(new_apartments[:3], 1):
+        table = Table(title=f"Apartment {i}", show_header=True, header_style="bold magenta")
+        table.add_column("Field", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Street", apt.get("street", "N/A"))
+        table.add_row("Neighborhood", apt.get("neighborhood", "N/A"))
+        table.add_row("City", apt.get("city", "N/A"))
+        table.add_row("Area", f"{apt.get('area', 'N/A')} m²")
+        table.add_row("Bedrooms", str(apt.get("bedrooms", "N/A")))
+        table.add_row("Bathrooms", str(apt.get("bathrooms", "N/A")))
+        table.add_row("Parking", str(apt.get("parking", "N/A")))
+        table.add_row("Price", _money(apt.get("price")))
+        table.add_row("Condo Fee", _money(apt.get("condo_fee")))
+        table.add_row("IPTU", _money(apt.get("iptu")))
+        table.add_row("Link", apt.get("link", "N/A"))
+
+        console.print(table)
+        console.print()
+
+
+@app.command("export-xlsx")
+def export_xlsx(
+    source: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, help="Listings file: a JSON history (json_file) or a CSV written by scrape"
+    ),
+    output: Path = typer.Option(..., "--output", "-o", help="Workbook to create, or to add a sheet to"),
+    config: Optional[Path] = typer.Option(
+        None, "--config", "-C", exists=True, dir_okay=False, help="Search config whose title and places label the sheet"
+    ),
+    name: Optional[str] = typer.Option(
+        None, "--name", "-n", help="Sheet name (default: the source file's date, DD-MM)"
+    ),
+):
+    """Add a sheet of already saved listings to an Excel workbook."""
+    setup_logging(verbose=False)
+    try:
+        settings = load_settings(config, {}) if config else None
+    except ValidationError as e:
+        console.print(f"[red]Invalid configuration:[/red]\n{e}")
+        raise typer.Exit(code=2) from e
+    try:
+        listings = read_listings(source)
+        if not listings:
+            console.print(f"[red]No listings in {source}[/red]")
+            raise typer.Exit(code=1)
+        sheet_name = name or datetime.fromtimestamp(source.stat().st_mtime).strftime("%d-%m")
+        options = SheetOptions(sheet_title(settings), _place_labels(settings), sheet_name)
+        sheet = append_listings_sheet(output, listings, options)
+    except XlsxExportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=2) from e
+    console.print(f'Sheet "{sheet}" added to [green]{output}[/green] ({len(listings)} listings)')
 
 
 @app.command()

@@ -59,6 +59,8 @@ class SearchSettings(BaseSettings):
     max_pages: Optional[int] = None
     json_file: str = "apartamentos.json"
     csv_file: Optional[str] = None
+    title: Optional[str] = None  # heading of each Excel sheet; default "<Aluguel|Venda> · <city>"
+    xlsx_file: Optional[str] = None  # workbook each run adds a sheet to
 
     @model_validator(mode="after")
     def _consistent(self) -> "SearchSettings":

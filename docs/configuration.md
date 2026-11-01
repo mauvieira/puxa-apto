@@ -99,6 +99,8 @@ whose name doesn't start with `PUXA_` are ignored.
 | `max_pages` | integer | none (no limit) | `--max-pages`, `-m` | `PUXA_MAX_PAGES` |
 | `json_file` | path | `"apartamentos.json"` | `--json`, `-j` | `PUXA_JSON_FILE` |
 | `csv_file` | path | none | `--csv` | `PUXA_CSV_FILE` |
+| `xlsx_file` | path (`.xlsx`) | none | `--xlsx` | `PUXA_XLSX_FILE` |
+| `title` | string | `"<Aluguel\|Venda> · <city>"` | none | `PUXA_TITLE` |
 
 ### `transaction`
 
@@ -339,7 +341,7 @@ When set, every run that finds new listings appends them to this CSV.
   go to `<name>_<YYYYMMDD_HHMMSS>.csv` next to it, and the console prints
   `... has different columns; new listings saved to ...`.
 - When unset, each such run writes `apartamentos_novos_<YYYYMMDD_HHMMSS>.csv` with only that
-  run's new listings.
+  run's new listings, unless `xlsx_file` is set: the Excel sheet then replaces that default CSV.
 
 The existing CSV (`csv_file`, or `apartamentos.csv` when unset) is also read to skip duplicates.
 
@@ -349,6 +351,53 @@ The existing CSV (`csv_file`, or `apartamentos.csv` when unset) is also read to 
   "places": [{"name": "Famed", "lat": -30.0400303, "lon": -51.2075511}],
   "json_file": "famed.json",
   "csv_file": "famed.csv"
+}
+```
+
+### `xlsx_file`
+
+When set, every run that finds new listings adds one sheet with them to this Excel workbook,
+creating the workbook if it is missing. The file opens in Google Sheets, Excel and ONLYOFFICE.
+
+- The sheet is named after the day (`DD-MM`; a second run that day gets `DD-MM (2)`) and becomes
+  the first tab. Existing sheets, and whatever you typed in them, are kept.
+- Rows are sorted by total, cheapest first. Each column has a filter: checkboxes for Bairro,
+  "Number filters" (between, ≥, ≤) for the Distância columns, Total, Aluguel, Condomínio,
+  IPTU, Área, Quartos, Banh. and Vagas, and "contains" for Rua. A blank cell means the site
+  didn't say, so "Vagas ≥ 1" hides listings without parking information.
+- Row 1 counts the rows the filters leave visible.
+- Categoria is a dropdown (Favoritado, Em andamento, Talvez, Descartado) that colours the row.
+  Its choices live on a hidden `Listas` sheet; keep it.
+- With `places`, each place gets a `Distância até <place>` column, in whole metres, so a filter
+  reads "≥ 500". With 2 or more places, a `Distância (mais próxima)` column comes first: the
+  distance `radius_km` filters on. Closest rows are greenest.
+- Comodidades translates `amenity_codes` to Portuguese.
+- The path is checked before scraping: a non-`.xlsx` name, a missing folder or a file that isn't
+  a readable workbook stops the run with exit code 2.
+- The sheet is written before the JSON history. If writing it fails, nothing is saved and the
+  run exits with code 1, so rerunning retries the same listings.
+- With `xlsx_file` set, the default timestamped CSV is not written; set `csv_file` to keep a CSV.
+
+```json
+{
+  "transaction": "aluguel",
+  "places": [{"name": "Famed", "lat": -30.0400303, "lon": -51.2075511}],
+  "json_file": "famed.json",
+  "xlsx_file": "famed.xlsx"
+}
+```
+
+### `title`
+
+The heading in cell A1 of each Excel sheet. Default: `Aluguel · <city>` or `Venda · <city>`
+(without the city when `city` is unset).
+
+```json
+{
+  "transaction": "aluguel",
+  "city": "Porto Alegre",
+  "title": "Aluguel perto da FAMED · UFRGS",
+  "xlsx_file": "famed.xlsx"
 }
 ```
 
@@ -383,6 +432,12 @@ enforced.
 - `--config`, `-C`: the config file. See [Where settings come from](#where-settings-come-from).
 - `--verbose`, `-V`: debug logging.
 - `puxa-apto info`: lists the supported sites.
+- `puxa-apto export-xlsx <listings.json|.csv> -o <workbook.xlsx>`: adds a sheet of listings that
+  were already saved (a `json_file` history or a CSV written by `scrape`) to a workbook, as
+  [`xlsx_file`](#xlsx_file) does. `-C <config>` takes the sheet's title and place names from a
+  search; without it, column labels come from the file's `distance_km_<place>` keys.
+  `-n <name>` names the sheet (default: the file's date, `DD-MM`). Exits 2 when the workbook
+  can't be written.
 
 ## Examples
 

@@ -2,10 +2,11 @@
   "transaction": "aluguel",
   "state": "RS",
   "city": "Porto Alegre",
+  "title": "Aluguel perto da FAMED · UFRGS",
   "places": [
     {"name": "Famed", "lat": -30.0400303, "lon": -51.2075511}
   ],
-  "radius_km": 1.2,
+  "radius_km": 1.3,
   "neighborhoods": ["Santa Cecília", "Rio Branco", "Bom Fim", "Santana", "Farroupilha", "Independência", "Moinhos de Vento", "Jardim Botânico"],
   "exclude_neighborhoods": ["Centro Histórico"],
   "json_file": "famed-ufrgs-v2.json"
