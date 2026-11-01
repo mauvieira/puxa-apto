@@ -362,6 +362,60 @@ def test_a_fixed_csv_keeps_every_listing_saved_across_runs(fake_sites, tmp_path)
     assert csv_links == [a["link"] for a in saved]
 
 
+def csv_links(path):
+    with open(path, newline="", encoding="utf-8") as f:
+        return [row["link"] for row in csv.DictReader(f)]
+
+
+def test_a_fresh_csv_gets_only_that_runs_new_listings(fake_sites, tmp_path):
+    out = tmp_path / "a.json"
+    search = ("-C", FAMED, "-m", "1", "-r", "50", "--json", str(out))
+    run(*search, "--skip-zap", "--csv", str(tmp_path / "first.csv"))
+    first = json.loads(out.read_text(encoding="utf-8"))
+    run(*search, "--csv", str(tmp_path / "diff.csv"))
+    added = json.loads(out.read_text(encoding="utf-8"))[len(first):]
+
+    assert added
+    assert csv_links(tmp_path / "diff.csv") == [a["link"] for a in added]
+
+
+def test_appending_keeps_rows_the_json_does_not_have(fake_sites, tmp_path):
+    out_csv = tmp_path / "out.csv"
+    search = ("-C", FAMED, "-m", "1", "-r", "50", "--json", str(tmp_path / "out.json"), "--csv", str(out_csv))
+    run(*search, "--skip-zap")
+    header_line = out_csv.read_bytes().splitlines()[0]
+    with open(out_csv, newline="", encoding="utf-8") as f:
+        fieldnames = next(csv.reader(f))
+    with open(out_csv, "a", newline="", encoding="utf-8") as f:
+        csv.DictWriter(f, fieldnames=fieldnames).writerow({"link": "https://example.com/manual"})
+    run(*search)
+
+    links = csv_links(out_csv)
+    assert out_csv.read_bytes().splitlines()[0] == header_line
+    manual = links.index("https://example.com/manual")
+    zap = [i for i, link in enumerate(links) if "zapimoveis.com.br" in link]
+    assert zap and min(zap) > manual
+    assert len(links) == len(set(links))
+
+
+def test_a_csv_with_other_columns_is_left_alone(fake_sites, tmp_path):
+    out_csv = tmp_path / "out.csv"
+    out_json = tmp_path / "out.json"
+    search = ("-C", FAMED, "-m", "1", "-r", "50", "--json", str(out_json), "--csv", str(out_csv))
+    run(*search, "--skip-zap")
+    before = out_csv.read_bytes()
+    first = json.loads(out_json.read_text(encoding="utf-8"))
+    result = run(*search, "--place", "HCPA=-30.0387,-51.2066")
+    added = json.loads(out_json.read_text(encoding="utf-8"))[len(first):]
+
+    assert out_csv.read_bytes() == before
+    [fallback] = tmp_path.glob("out_*.csv")
+    assert added and csv_links(fallback) == [a["link"] for a in added]
+    with open(fallback, newline="", encoding="utf-8") as f:
+        assert "distance_km_hcpa" in next(csv.reader(f))
+    assert "has different columns" in result.output
+
+
 def test_listings_whose_portal_hides_the_address_are_flagged_as_approximate(fake_sites, tmp_path):
     # Zap fixture listings with isApproximateLocation: their point is a rounded placeholder.
     approximate = ("2902205200", "2918324333", "2918845046", "2919013171", "2919113143")

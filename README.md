@@ -83,8 +83,7 @@ Lists from env vars are JSON (`PUXA_BEDROOMS='[1,2]'`); nested fields use `__`
 - `--vivareal-url`, `-v` / `--chaves-url`, `-c` / `--imovelweb-url`, `-i` / `--zap-url`, `-z` /
   `--leindecker-url` / `--certa-url` (repeatable)
 - `--json`, `-j` (default: `apartamentos.json`)
-- `--csv`: a CSV copy of the whole `--json` file, rewritten on every run with new listings
-  (default: `apartamentos_novos_<timestamp>.csv` with only this run's new listings)
+- `--csv`: append this run's new listings to this CSV; the header is written once and never rewritten (default: `apartamentos_novos_<timestamp>.csv` with only this run's new listings)
 - `--max-pages`, `-m`: per search URL
 - `--verbose`, `-V`
 - `--skip-vivareal`, `--skip-chaves`, `--skip-imovelweb`, `--skip-zap`, `--skip-leindecker`,
