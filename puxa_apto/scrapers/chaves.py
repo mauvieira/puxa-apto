@@ -19,7 +19,7 @@ class ChavesScraper:
     def __init__(self, url: str):
         self.url = url
 
-    def scrape_apartment(self, div_element) -> Optional[Dict]:
+    def scrape_apartment(self, div_element) -> Optional[Dict]:  # sensors: function-lines=92, complexity=33, statements=76 -- baseline: predates sensors; lower via refactor-tick
         try:
             link_elem = div_element.find("a", href=True)
             if not link_elem:
@@ -139,20 +139,20 @@ class ChavesScraper:
         new_query = urlencode(query_params, doseq=True)
         return urlunparse(parsed._replace(query=new_query))
 
-    def has_next_page(self, soup: BeautifulSoup, current_count: int, previous_count: int) -> bool:
+    def has_next_page(self, soup: BeautifulSoup, current_count: int, previous_count: int) -> bool:  # sensors: complexity=16 -- baseline: predates sensors; lower via refactor-tick
         if current_count == 0:
             return False
 
         if current_count < previous_count:
             return False
 
-        next_button = soup.find("a", string=lambda x: x and "Próxima" in x if x else False)
+        next_button = soup.find("a", string=lambda x: x and "Próxima" in x if x else False)  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
         if next_button:
             disabled = next_button.get("disabled") or "disabled" in str(next_button.get("class", []))
             if not disabled:
                 return True
 
-        pagination = soup.find("nav", class_=lambda x: x and "pagination" in str(x).lower() if x else False)
+        pagination = soup.find("nav", class_=lambda x: x and "pagination" in str(x).lower() if x else False)  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
         if pagination:
             next_link = pagination.find("a", string=lambda x: x and ("Próxima" in x or ">" in x) if x else False)
             if next_link and not next_link.get("disabled"):
@@ -167,13 +167,16 @@ class ChavesScraper:
         The browser does this swap client-side; without it, price and condo fee are missing
         from cards whose details arrive in a later stream chunk.
         """
-        for template in soup.find_all("template", id=lambda x: x and x.startswith("P:")):
-            segment = soup.find("div", id="S:" + template["id"][2:])
+        # reversed: the first segment with a given id wins, as soup.find would pick it
+        divs = reversed(soup.find_all("div", id=re.compile(r"^S:")))
+        segments = {div["id"][2:]: div for div in divs}
+        for template in soup.find_all("template", id=re.compile(r"^P:")):
+            segment = segments.get(template["id"][2:])
             if segment:
                 template.replace_with(segment.extract())
 
     @staticmethod
-    def page_details(soup: BeautifulSoup) -> Dict[str, Dict]:
+    def page_details(soup: BeautifulSoup) -> Dict[str, Dict]:  # sensors: complexity=11 -- baseline: predates sensors; lower via refactor-tick
         """Coordinates per listing id, from the JSON-LD `Apartment` objects' `geo`."""
         details: Dict[str, Dict] = {}
         for script in soup.find_all("script", type="application/ld+json"):
@@ -187,14 +190,14 @@ class ChavesScraper:
                     continue
                 ident = listing_id(str(obj.get("@id") or ""))
                 try:
-                    lat, lon = float(geo.get("latitude")), float(geo.get("longitude"))
+                    lat, lon = float(geo.get("latitude")), float(geo.get("longitude"))  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
                 except (TypeError, ValueError):
                     continue
                 if ident and valid_point(lat, lon):
                     details[ident] = {"lat": lat, "lon": lon}
         return details
 
-    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:
+    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:  # sensors: complexity=19, statements=52, nesting=5 -- baseline: predates sensors; lower via refactor-tick
         apartments = []
         page = 1
         previous_count = 0
@@ -205,7 +208,7 @@ class ChavesScraper:
                 current_url = self.get_next_page_url(self.url, page) if page > 1 else self.url
                 logger.info(f"Processing page {page} of Chaves na Mão...")
 
-                soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                soup = BeautifulSoup(web.fetch_page(current_url), "lxml")
                 self.inline_streamed_segments(soup)
                 details = self.page_details(soup)
 

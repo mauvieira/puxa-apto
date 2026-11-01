@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ZapScraper(BaseScraper):
 
-    def scrape_apartment(self, li_element) -> Optional[Dict]:
+    def scrape_apartment(self, li_element) -> Optional[Dict]:  # pyright: ignore[reportIncompatibleMethodOverride] -- baseline: predates type checking  # sensors: function-lines=72, complexity=19, statements=56 -- baseline: predates sensors; lower via refactor-tick
         try:
             link_elem = li_element.find("a", href=True)
             if not link_elem or link_elem["href"] == "#":

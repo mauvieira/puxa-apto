@@ -43,13 +43,13 @@ def _parse_place(value: str) -> dict:
         if not sep or not name.strip():
             raise ValueError(value)
         lat, lon = (float(part) for part in coords.split(","))
-    except ValueError:
-        raise typer.BadParameter("expected NAME=LAT,LON, e.g. HCPA=-30.0387,-51.2066", param_hint="--place")
+    except ValueError as err:
+        raise typer.BadParameter("expected NAME=LAT,LON, e.g. HCPA=-30.0387,-51.2066", param_hint="--place") from err
     return {"name": name.strip(), "lat": lat, "lon": lon}
 
 
 @app.command()
-def scrape(
+def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements=77 -- baseline: predates sensors; lower via refactor-tick
     config: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -149,7 +149,7 @@ def scrape(
         settings = load_settings(config_file, overrides)
     except ValidationError as e:
         console.print(f"[red]Invalid configuration:[/red]\n{e}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from e
 
     cli_urls = {
         "vivareal": vivareal_url,

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class VivaRealScraper(BaseScraper):
 
-    def scrape_apartment(self, li_element) -> Optional[Dict]:
+    def scrape_apartment(self, li_element) -> Optional[Dict]:  # pyright: ignore[reportIncompatibleMethodOverride] -- baseline: predates type checking  # sensors: function-lines=78, complexity=23, statements=62 -- baseline: predates sensors; lower via refactor-tick
         try:
             link_elem = li_element.find("a", href=True)
             if not link_elem or link_elem["href"] == "#":

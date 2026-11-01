@@ -135,18 +135,15 @@ class BaseScraper(ABC):
         return urlunparse(new_parsed)
 
     def has_next_page(self, soup: BeautifulSoup) -> bool:
-        next_button = soup.find("a", {"aria-label": lambda x: x and "Próxima" in x if x else False})
+        next_button = soup.find("a", {"aria-label": lambda x: x and "Próxima" in x if x else False})  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
         if next_button:
-            return not next_button.get("aria-disabled") == "true"
+            return next_button.get("aria-disabled") != "true"
 
-        next_link = soup.find("a", href=lambda x: x and "pagina=" in x if x else False)
-        if next_link:
-            return True
-
-        return False
+        next_link = soup.find("a", href=lambda x: x and "pagina=" in x if x else False)  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
+        return bool(next_link)
 
     @staticmethod
-    def link_grouped_cards(soup: BeautifulSoup) -> None:
+    def link_grouped_cards(soup: BeautifulSoup) -> None:  # sensors: complexity=12 -- baseline: predates sensors; lower via refactor-tick
         """Give grouped cards their listing URL.
 
         VivaReal/Zap render a unit advertised by several agencies as one card with href="#"
@@ -166,12 +163,12 @@ class BaseScraper(ABC):
 
         for card in soup.find_all("a", href="#"):
             for img in card.find_all("img", src=True):
-                match = _MEDIA_KEY.search(img["src"])
+                match = _MEDIA_KEY.search(img["src"])  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
                 if match and match.group(1) in url_by_media:
                     card["href"] = url_by_media[match.group(1)]
                     break
 
-    def page_details(self, soup: BeautifulSoup) -> Dict[str, Dict]:
+    def page_details(self, soup: BeautifulSoup) -> Dict[str, Dict]:  # sensors: complexity=22 -- baseline: predates sensors; lower via refactor-tick
         """Coordinates, description and amenity codes per listing id, from the RSC flight data.
 
         VivaReal/Zap ship their listing objects in `self.__next_f.push([1, "..."])` scripts.
@@ -207,7 +204,7 @@ class BaseScraper(ABC):
                 entry = {
                     "description": description if isinstance(description, str) else "",
                     "amenity_codes": [str(v) for v in values] if isinstance(values, list) else [],
-                    "agency_ref": agency_ref(_dig(obj, "advertiser", "name"), obj.get("externalId")),
+                    "agency_ref": agency_ref(_dig(obj, "advertiser", "name"), obj.get("externalId")),  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
                     # Hidden address: the portal gives a rounded placeholder point, not the flat's.
                     "approximate_location": _dig(obj, "address", "isApproximateLocation") is True,
                 }
@@ -222,7 +219,7 @@ class BaseScraper(ABC):
                         known[key] = value
         return details
 
-    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:
+    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:  # sensors: complexity=11 -- baseline: predates sensors; lower via refactor-tick
         apartments = []
         page = 1
 
@@ -231,7 +228,7 @@ class BaseScraper(ABC):
                 current_url = self.get_next_page_url(self.url, page) if page > 1 else self.url
                 logger.info(f"Processing page {page}...")
 
-                soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                soup = BeautifulSoup(web.fetch_page(current_url), "lxml")
                 self.link_grouped_cards(soup)
                 details = self.page_details(soup)
                 listing_elements = self.find_listing_elements(soup)

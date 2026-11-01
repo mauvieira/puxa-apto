@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ImovelWebScraper(BaseScraper):
 
-    def scrape_apartment(self, div_element) -> Optional[Dict]:
+    def scrape_apartment(self, div_element) -> Optional[Dict]:  # pyright: ignore[reportIncompatibleMethodOverride] -- baseline: predates type checking  # sensors: function-lines=75, complexity=24, statements=55 -- baseline: predates sensors; lower via refactor-tick
         try:
             link = div_element.get("data-to-posting", "")
             if not link:
@@ -126,7 +126,7 @@ class ImovelWebScraper(BaseScraper):
             geolocation = _dig(location, "postingGeolocation", "geolocation")
             lat, lon = _dig(geolocation, "latitude"), _dig(geolocation, "longitude")
             if valid_point(lat, lon):
-                entry.update(lat=lat, lon=lon)
+                entry.update(lat=lat, lon=lon)  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
             details[str(obj["postingId"])] = entry
         return details
 
@@ -134,8 +134,8 @@ class ImovelWebScraper(BaseScraper):
         listing_elements = soup.find_all("div", {"data-qa": "posting PROPERTY"})
 
         if not listing_elements:
-            listing_elements = soup.find_all(
-                "div", class_=lambda x: x and "postingCardLayout-module__posting-card-layout" in x
+            listing_elements = soup.find_all(  # pyright: ignore[reportCallIssue] -- baseline: bs4 stubs reject lambda/attribute filters
+                "div", class_=lambda x: x and "postingCardLayout-module__posting-card-layout" in x  # pyright: ignore[reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
             )
 
         return listing_elements
@@ -153,8 +153,8 @@ class ImovelWebScraper(BaseScraper):
         else:
             return f"{current_url}?pagina={page_num}"
 
-    def has_next_page(self, soup: BeautifulSoup) -> bool:
-        paging_container = soup.find("div", class_=lambda x: x and "paging-module__container-paging" in x)
+    def has_next_page(self, soup: BeautifulSoup) -> bool:  # sensors: complexity=23, nesting=6 -- baseline: predates sensors; lower via refactor-tick
+        paging_container = soup.find("div", class_=lambda x: x and "paging-module__container-paging" in x)  # pyright: ignore[reportCallIssue, reportArgumentType] -- baseline: bs4 stubs reject lambda/attribute filters
         if paging_container:
             page_links = paging_container.find_all(
                 "a", {"data-qa": lambda x: x and x.startswith("PAGING_") if x else False}
@@ -208,7 +208,7 @@ class ImovelWebScraper(BaseScraper):
             logger.debug("Pagination container not found")
             return False
 
-    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:
+    def scrape(self, max_pages: Optional[int] = None) -> List[Dict]:  # sensors: function-lines=61, complexity=16, statements=54, nesting=5 -- baseline: predates sensors; lower via refactor-tick
         apartments = []
         page = 1
         previous_count = 0
@@ -219,7 +219,7 @@ class ImovelWebScraper(BaseScraper):
                 current_url = self.get_next_page_url(self.url, page) if page > 1 else self.url
                 logger.info(f"Processing page {page} of ImovelWeb...")
 
-                soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                soup = BeautifulSoup(web.fetch_page(current_url), "lxml")
                 details = self.page_details(soup)
                 listing_elements = self.find_listing_elements(soup)
                 current_count = len(listing_elements)
