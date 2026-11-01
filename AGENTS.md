@@ -3,8 +3,9 @@
 ## What this is
 
 `puxa-apto` is a CLI that scrapes apartment listings from Brazilian real-estate sites and keeps
-a deduplicated CSV: `puxa-apto scrape -C buscas/<x>.json`. Usage, options and the search file
-format are in [README.md](README.md).
+a deduplicated CSV: `puxa-apto scrape -C buscas/<x>.json`. Usage is in [README.md](README.md);
+every setting, flag and environment variable is in [docs/configuration.md](docs/configuration.md).
+Sites are registered in `puxa_apto/sites.py` (README, "Adding a site").
 
 ## Commands
 

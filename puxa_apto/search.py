@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 from math import asin, cos, radians, sin, sqrt
-from typing import Callable, Dict, List, Optional, get_args
+from typing import TYPE_CHECKING, Dict, List, Optional
 from urllib.parse import urlencode
 
-from .settings import Place, Point, SearchSettings, SiteName
 from .utils.text import slugify
 
-SITES = get_args(SiteName)
+if TYPE_CHECKING:
+    from .settings import Place, Point, SearchSettings
+
 EARTH_RADIUS_KM = 6371.0
 
 
@@ -52,7 +55,7 @@ def _map_query(settings: SearchSettings) -> str:
     return urlencode(params)
 
 
-def _vivareal(settings: SearchSettings) -> List[str]:
+def vivareal_urls(settings: SearchSettings) -> List[str]:
     if not settings.places:
         return []
     return [
@@ -61,13 +64,13 @@ def _vivareal(settings: SearchSettings) -> List[str]:
     ]
 
 
-def _zap(settings: SearchSettings) -> List[str]:
+def zap_urls(settings: SearchSettings) -> List[str]:
     if not settings.places:
         return []
     return [f"https://www.zapimoveis.com.br/{settings.transaction}/?" + _map_query(settings)]
 
 
-def _chaves(settings: SearchSettings) -> List[str]:
+def chaves_urls(settings: SearchSettings) -> List[str]:
     if not settings.neighborhoods:
         return []
     segment = {"aluguel": "apartamentos-para-alugar", "venda": "apartamentos-a-venda"}[
@@ -87,7 +90,7 @@ def _chaves(settings: SearchSettings) -> List[str]:
     ]
 
 
-def _imovelweb(settings: SearchSettings) -> List[str]:
+def imovelweb_urls(settings: SearchSettings) -> List[str]:
     if not settings.neighborhoods:
         return []
     city = slugify(settings.city)  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
@@ -126,7 +129,7 @@ def _agency_filters(settings: SearchSettings, bedrooms_key: str) -> str:
     return "/".join(segments) + "/" if segments else ""
 
 
-def _leindecker(settings: SearchSettings) -> List[str]:
+def leindecker_urls(settings: SearchSettings) -> List[str]:
     if not _porto_alegre(settings):
         return []
     mode = {"aluguel": "alugar", "venda": "comprar"}[settings.transaction]
@@ -141,7 +144,7 @@ def _leindecker(settings: SearchSettings) -> List[str]:
     ]
 
 
-def _certa(settings: SearchSettings) -> List[str]:
+def certa_urls(settings: SearchSettings) -> List[str]:
     if not _porto_alegre(settings) or settings.transaction != "aluguel":
         return []
     hoods = "_".join(slugify(n) + "-porto-alegre" for n in settings.neighborhoods)
@@ -150,21 +153,6 @@ def _certa(settings: SearchSettings) -> List[str]:
         + _agency_filters(settings, "quartos")
         + "1/"
     ]
-
-
-_URL_BUILDERS: Dict[str, Callable[[SearchSettings], List[str]]] = {
-    "vivareal": _vivareal,
-    "zap": _zap,
-    "chaves": _chaves,
-    "imovelweb": _imovelweb,
-    "leindecker": _leindecker,
-    "certa": _certa,
-}
-
-
-def resolve_urls(site: str, settings: SearchSettings, cli_urls: List[str]) -> List[str]:
-    """CLI URLs win over configured URLs, which win over URLs built from the search area."""
-    return cli_urls or getattr(settings.urls, site) or _URL_BUILDERS[site](settings)
 
 
 def annotate(apartments: List[Dict], settings: SearchSettings) -> None:  # sensors: complexity=11 -- baseline: predates sensors; lower via refactor-tick

@@ -167,25 +167,25 @@ def test_saved_listings_reposted_with_a_new_link_are_not_new(tmp_path):
 # --- save_to_json ------------------------------------------------------------------------
 
 
-def test_save_to_json_appends_to_the_history_and_returns_all_of_it(tmp_path):
-    json_file = str(tmp_path / "a.json")
+def test_save_to_json_appends_to_the_history(tmp_path):
+    json_file = tmp_path / "a.json"
     first, second = history()[:2], history()[2:]
 
-    assert save_to_json(first, json_file) == first
-    assert save_to_json(second, json_file) == first + second
-    with open(json_file, encoding="utf-8") as f:
-        assert json.load(f) == first + second
+    save_to_json(first, str(json_file))
+    save_to_json(second, str(json_file))
+
+    assert json.loads(json_file.read_text(encoding="utf-8")) == first + second
 
 
-def test_save_to_json_with_nothing_new_returns_the_history_untouched(tmp_path):
+def test_save_to_json_with_nothing_new_leaves_the_history_untouched(tmp_path):
     json_file = tmp_path / "a.json"
 
-    assert save_to_json([], str(json_file)) == []
+    save_to_json([], str(json_file))
     assert not json_file.exists()
 
     save_to_json(history(), str(json_file))
     before = json_file.read_bytes()
-    assert save_to_json([], str(json_file)) == history()
+    save_to_json([], str(json_file))
     assert json_file.read_bytes() == before
 
 

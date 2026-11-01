@@ -1,6 +1,7 @@
+import inspect
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import typer
 from pydantic import ValidationError
@@ -9,32 +10,16 @@ from rich.table import Table
 
 from . import search
 from .config import setup_logging
-from .scrapers import (
-    CertaScraper,
-    ChavesScraper,
-    ImovelWebScraper,
-    LeindeckerScraper,
-    VivaRealScraper,
-    ZapScraper,
-)
 from .settings import load_settings
+from .sites import SITES, resolve_urls
 from .utils.fingerprint import drop_cross_posts, filter_new_apartments
-from .utils.storage import load_existing_apartments, save_new_apartments_csv, save_to_csv, save_to_json
+from .utils.storage import append_to_csv, load_existing_apartments, save_new_apartments_csv, save_to_json
 
 app = typer.Typer(help="Apartment scraper")
 console = Console()
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_FILE = Path("puxa-apto.json")
-
-SCRAPERS = {
-    "vivareal": ("VIVAREAL", VivaRealScraper),
-    "chaves": ("CHAVES NA MÃO", ChavesScraper),
-    "imovelweb": ("IMOVELWEB", ImovelWebScraper),
-    "zap": ("ZAP IMÓVEIS", ZapScraper),
-    "leindecker": ("LEINDECKER", LeindeckerScraper),
-    "certa": ("CERTA", CertaScraper),
-}
 
 
 def _parse_place(value: str) -> dict:
@@ -48,8 +33,52 @@ def _parse_place(value: str) -> dict:
     return {"name": name.strip(), "lat": lat, "lon": lon}
 
 
+def _save_csv(new_apartments: List[Dict], csv_file: Optional[str]) -> None:
+    """Write this run's new listings: appended to `csv_file`, to a timestamped sibling when its
+    columns differ, or to a timestamped CSV of their own when no `csv_file` is configured."""
+    if not csv_file:
+        console.print(f"Data saved to CSV: [green]{save_new_apartments_csv(new_apartments)}[/green]")
+        return
+    written = append_to_csv(new_apartments, csv_file)
+    if written == csv_file:
+        console.print(f"Data appended to CSV: [green]{written}[/green] ({len(new_apartments)} listings)")
+    else:
+        console.print(f"[yellow]{csv_file} has different columns; new listings saved to {written}[/yellow]")
+
+
+def _with_site_flags(command):
+    """Give `command` --<key>-url (plus the site's short alias) and --skip-<key> per site, placed
+    where the hand-written ones were; they arrive in **site_flags as <key>_url and skip_<key>."""
+    signature = inspect.signature(command)
+    params = [p for p in signature.parameters.values() if p.kind is not p.VAR_KEYWORD]
+    at = [p.name for p in params].index("json_file")
+    kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    urls = [
+        inspect.Parameter(
+            f"{key}_url",
+            kind,
+            annotation=Optional[List[str]],
+            default=typer.Option(None, f"--{key}-url", *filter(None, [site.short_flag]), help=site.url_help),
+        )
+        for key, site in SITES.items()
+    ]
+    skips = [
+        inspect.Parameter(
+            f"skip_{key}",
+            kind,
+            annotation=bool,
+            default=typer.Option(False, f"--skip-{key}", help=f"Skip {site.name} scraping"),
+        )
+        for key, site in SITES.items()
+    ]
+    command.__signature__ = signature.replace(parameters=params[:at] + urls + params[at:] + skips)
+    return command
+
+
+
 @app.command()
-def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements=77 -- baseline: predates sensors; lower via refactor-tick
+@_with_site_flags
+def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements=70 -- baseline: predates sensors; lower via refactor-tick
     config: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -80,46 +109,19 @@ def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements
     bedrooms: Optional[List[int]] = typer.Option(
         None, "--bedrooms", "-q", help="Accepted bedroom count (repeatable)"
     ),
-    vivareal_url: Optional[List[str]] = typer.Option(
-        None, "--vivareal-url", "-v", help="VivaReal search URL (repeatable; replaces the built one)"
-    ),
-    chaves_url: Optional[List[str]] = typer.Option(
-        None, "--chaves-url", "-c", help="Chaves na Mão search URL (repeatable; replaces the built ones)"
-    ),
-    imovelweb_url: Optional[List[str]] = typer.Option(
-        None, "--imovelweb-url", "-i", help="ImovelWeb search URL (repeatable; replaces the built one)"
-    ),
-    zap_url: Optional[List[str]] = typer.Option(
-        None, "--zap-url", "-z", help="Zap Imóveis search URL (repeatable; replaces the built one)"
-    ),
-    leindecker_url: Optional[List[str]] = typer.Option(
-        None,
-        "--leindecker-url",
-        help="Leindecker search URL ending with its page number, e.g. …/1/ (repeatable; replaces the built one)",
-    ),
-    certa_url: Optional[List[str]] = typer.Option(
-        None,
-        "--certa-url",
-        help="Certa search URL ending with its page number, e.g. …/1/ (repeatable; replaces the built one)",
-    ),
     json_file: Optional[str] = typer.Option(
         None, "--json", "-j", help="Output JSON file path (default: apartamentos.json)"
     ),
     csv_file: Optional[str] = typer.Option(
         None,
         "--csv",
-        help="CSV mirror of the whole JSON file, rewritten each run (default: a timestamped CSV of this run's new listings)",
+        help="CSV that each run appends its new listings to; never rewritten (default: a timestamped CSV of this run's new listings)",
     ),
     max_pages: Optional[int] = typer.Option(
         None, "--max-pages", "-m", help="Maximum number of pages to scrape per URL"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-V", help="Enable verbose logging"),
-    skip_vivareal: bool = typer.Option(False, "--skip-vivareal", help="Skip VivaReal scraping"),
-    skip_chaves: bool = typer.Option(False, "--skip-chaves", help="Skip Chaves na Mão scraping"),
-    skip_imovelweb: bool = typer.Option(False, "--skip-imovelweb", help="Skip ImovelWeb scraping"),
-    skip_zap: bool = typer.Option(False, "--skip-zap", help="Skip Zap Imóveis scraping"),
-    skip_leindecker: bool = typer.Option(False, "--skip-leindecker", help="Skip Leindecker scraping"),
-    skip_certa: bool = typer.Option(False, "--skip-certa", help="Skip Certa scraping"),
+    **site_flags,
 ):
 
     setup_logging(verbose=verbose)
@@ -151,26 +153,10 @@ def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements
         console.print(f"[red]Invalid configuration:[/red]\n{e}")
         raise typer.Exit(code=2) from e
 
-    cli_urls = {
-        "vivareal": vivareal_url,
-        "chaves": chaves_url,
-        "imovelweb": imovelweb_url,
-        "zap": zap_url,
-        "leindecker": leindecker_url,
-        "certa": certa_url,
-    }
-    skipped = {
-        "vivareal": skip_vivareal,
-        "chaves": skip_chaves,
-        "imovelweb": skip_imovelweb,
-        "zap": skip_zap,
-        "leindecker": skip_leindecker,
-        "certa": skip_certa,
-    }
     site_urls = {
-        site: search.resolve_urls(site, settings, list(cli_urls[site] or []))
-        for site in search.SITES
-        if site in settings.sites and not skipped[site]
+        key: resolve_urls(key, settings, list(site_flags[f"{key}_url"] or []))
+        for key in SITES
+        if key in settings.sites and not site_flags[f"skip_{key}"]
     }
     if not any(site_urls.values()):
         console.print(
@@ -192,26 +178,24 @@ def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements
 
     all_apartments = []
 
-    for site, urls in site_urls.items():
-        label, scraper_cls = SCRAPERS[site]
+    for key, urls in site_urls.items():
+        site = SITES[key]
         if not urls:
             console.print(
-                f"[yellow]Skipping {label}: nothing to search (set places for VivaReal/Zap, "
-                "neighborhoods for Chaves/ImovelWeb, Porto Alegre neighborhoods for "
-                "Leindecker/Certa (Certa: aluguel only), or pass a URL)[/yellow]\n"
+                f"[yellow]Skipping {site.label}: nothing to search (needs {site.needs}, or pass --{key}-url)[/yellow]\n"
             )
             continue
 
-        console.print(f"[bold cyan]{label}[/bold cyan]")
+        console.print(f"[bold cyan]{site.label}[/bold cyan]")
         console.print("=" * 50)
         for url in urls:
             try:
-                apartments = scraper_cls(url).scrape(max_pages=settings.max_pages)
+                apartments = site.scraper(url).scrape(max_pages=settings.max_pages)
                 all_apartments.extend(apartments)
                 console.print(f"Found [green]{len(apartments)}[/green] apartments\n")
             except Exception as e:
-                logger.error(f"Error scraping {label}: {e}")
-                console.print(f"[red]Error scraping {label}: {e}[/red]\n")
+                logger.error(f"Error scraping {site.label}: {e}")
+                console.print(f"[red]Error scraping {site.label}: {e}[/red]\n")
 
     console.print(f"\n[bold]{'='*50}[/bold]")
     console.print(f"[bold]Total apartments found:[/bold] [green]{len(all_apartments)}[/green]")
@@ -237,16 +221,9 @@ def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements
     console.print(f"Duplicates filtered: [yellow]{len(matching) - len(new_apartments)}[/yellow]\n")
 
     if new_apartments:
-        saved = save_to_json(new_apartments, settings.json_file)
+        save_to_json(new_apartments, settings.json_file)
         console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
-
-        if settings.csv_file:
-            save_to_csv(saved, settings.csv_file)
-            console.print(f"Data saved to CSV: [green]{settings.csv_file}[/green] ({len(saved)} listings)")
-        else:
-            csv_filename = save_new_apartments_csv(new_apartments)
-            if csv_filename:
-                console.print(f"Data saved to CSV: [green]{csv_filename}[/green]")
+        _save_csv(new_apartments, settings.csv_file)
 
         console.print("\n[bold]--- First 3 new apartments ---[/bold]")
         for i, apt in enumerate(new_apartments[:3], 1):
@@ -286,12 +263,8 @@ def info():
     console.print("[bold blue]Puxa Apto - Apartment Scraper[/bold blue]\n")
     console.print("A CLI tool for scraping apartment listings from Brazilian real estate websites.")
     console.print("\nSupported websites:")
-    console.print("  • VivaReal (vivareal.com.br)")
-    console.print("  • Chaves na Mão (chavesnamao.com.br)")
-    console.print("  • ImovelWeb (imovelweb.com.br)")
-    console.print("  • Zap Imóveis (zapimoveis.com.br)")
-    console.print("  • Leindecker (leindecker.com.br)")
-    console.print("  • Certa (certa.com.br)")
+    for site in SITES.values():
+        console.print(f"  • {site.name} ({site.host})")
     console.print("\nUse [cyan]puxa-apto scrape --help[/cyan] for usage information.")
 
 
