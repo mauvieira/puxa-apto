@@ -1,16 +1,16 @@
 
+import json
 import logging
 import re
 import time
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
-from ..config import DEFAULT_HEADERS
+from ..utils import web
 from ..utils.extractors import extract_number, extract_price
-from .base import BaseScraper
+from .base import BaseScraper, _dig, _walk, merge_details, valid_point
 
 logger = logging.getLogger(__name__)
 
@@ -19,24 +19,23 @@ class ImovelWebScraper(BaseScraper):
 
     def scrape_apartment(self, div_element) -> Optional[Dict]:
         try:
-            link_elem = div_element.find("div", {"data-to-posting": True})
-            if not link_elem:
+            link = div_element.get("data-to-posting", "")
+            if not link:
                 link_elem = div_element.find("a", href=lambda x: x and "/propriedades/" in x if x else False)
+                link = link_elem.get("href", "") if link_elem else ""
 
-            link = ""
-            if link_elem:
-                link = link_elem.get("data-to-posting", "") or link_elem.get("href", "")
-                if link and not link.startswith("http"):
-                    link = urljoin("https://www.imovelweb.com.br", link)
+            if link:
+                # The query carries per-position tracking params that break link-based dedup.
+                link = urljoin("https://www.imovelweb.com.br", link.split("?", 1)[0])
 
             if not link:
                 return None
 
-            price_elem = div_element.find("div", {"data-qa": "POSTING_CARD_PRICE"})
+            price_elem = div_element.find(attrs={"data-qa": "POSTING_CARD_PRICE"})
             price_text = price_elem.get_text(strip=True) if price_elem else ""
             price = extract_price(price_text)
 
-            expenses_elem = div_element.find("div", {"data-qa": "expensas"})
+            expenses_elem = div_element.find(attrs={"data-qa": "expensas"})
             condo_fee = None
             iptu = None
 
@@ -50,7 +49,7 @@ class ImovelWebScraper(BaseScraper):
                 if iptu_match:
                     iptu = extract_price(iptu_match.group(0))
 
-            location_elem = div_element.find("h2", {"data-qa": "POSTING_CARD_LOCATION"})
+            location_elem = div_element.find(attrs={"data-qa": "POSTING_CARD_LOCATION"})
             neighborhood = ""
             city = ""
 
@@ -62,7 +61,7 @@ class ImovelWebScraper(BaseScraper):
                     city = location_match.group(2).strip()
 
             address_elem = div_element.find(
-                "div", class_=lambda x: x and "postingLocations-module__location-address" in x
+                class_=lambda x: x and "postingLocations-module__location-address" in x
             )
             street = address_elem.get_text(strip=True) if address_elem else ""
 
@@ -107,6 +106,29 @@ class ImovelWebScraper(BaseScraper):
         except Exception as e:
             logger.error(f"Error processing ImovelWeb apartment: {e}")
             return None
+
+    def page_details(self, soup: BeautifulSoup) -> Dict[str, Dict]:
+        """Coordinates and description per posting id, from `window.__PRELOADED_STATE__`."""
+        script = soup.find("script", id="preloadedData")
+        source = (script.string or "") if script else ""
+        try:
+            state, _ = json.JSONDecoder().raw_decode(source, source.index("{"))
+        except ValueError:
+            return {}
+
+        details: Dict[str, Dict] = {}
+        for obj in _walk(state):
+            location = obj.get("postingLocation")
+            if not (obj.get("postingId") and isinstance(location, dict)):
+                continue
+            description = obj.get("descriptionNormalized")
+            entry = {"description": description if isinstance(description, str) else ""}
+            geolocation = _dig(location, "postingGeolocation", "geolocation")
+            lat, lon = _dig(geolocation, "latitude"), _dig(geolocation, "longitude")
+            if valid_point(lat, lon):
+                entry.update(lat=lat, lon=lon)
+            details[str(obj["postingId"])] = entry
+        return details
 
     def find_listing_elements(self, soup: BeautifulSoup) -> List:
         listing_elements = soup.find_all("div", {"data-qa": "posting PROPERTY"})
@@ -197,10 +219,8 @@ class ImovelWebScraper(BaseScraper):
                 current_url = self.get_next_page_url(self.url, page) if page > 1 else self.url
                 logger.info(f"Processing page {page} of ImovelWeb...")
 
-                response = requests.get(current_url, headers=self.headers, timeout=30)
-                response.raise_for_status()
-
-                soup = BeautifulSoup(response.content, "html.parser")
+                soup = BeautifulSoup(web.fetch_page(current_url), "html.parser")
+                details = self.page_details(soup)
                 listing_elements = self.find_listing_elements(soup)
                 current_count = len(listing_elements)
 
@@ -215,6 +235,7 @@ class ImovelWebScraper(BaseScraper):
                 for div_elem in listing_elements:
                     apartment = self.scrape_apartment(div_elem)
                     if apartment:
+                        merge_details(apartment, details)
                         link = apartment.get("link", "")
                         if link and link not in seen_links:
                             seen_links.add(link)
@@ -248,15 +269,11 @@ class ImovelWebScraper(BaseScraper):
                     logger.info(f"No more pages available on ImovelWeb (current page: {page}).")
                     break
 
-                if page >= 3:
-                    logger.info("Safety limit reached (3 pages). Finishing.")
-                    break
-
                 previous_count = current_count
                 page += 1
                 time.sleep(1.5)
 
-            except requests.RequestException as e:
+            except web.RequestException as e:
                 logger.error(f"Error making request on page {page}: {e}")
                 break
             except Exception as e:

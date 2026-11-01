@@ -104,14 +104,22 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
         "price",
         "condo_fee",
         "iptu",
+        "total_price",
+        "distance_km",
     ]
+    # One distance column per reference place, named after it, in first-seen order.
+    fieldnames += dict.fromkeys(k for apt in apartments for k in apt if k.startswith("distance_km_"))
+    fieldnames += ["amenity_codes", "description"]
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
         for apt in apartments:
-            row = {field: apt.get(field, "") for field in fieldnames}
+            row = {}
+            for field in fieldnames:
+                value = apt.get(field, "")
+                row[field] = ";".join(value) if isinstance(value, list) else value
             writer.writerow(row)
 
     logger.info(f"Data saved to CSV: {filename} ({len(apartments)} new records)")
