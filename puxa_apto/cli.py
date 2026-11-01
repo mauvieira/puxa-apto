@@ -9,10 +9,17 @@ from rich.table import Table
 
 from . import search
 from .config import setup_logging
-from .scrapers import ChavesScraper, ImovelWebScraper, VivaRealScraper, ZapScraper
+from .scrapers import (
+    CertaScraper,
+    ChavesScraper,
+    ImovelWebScraper,
+    LeindeckerScraper,
+    VivaRealScraper,
+    ZapScraper,
+)
 from .settings import load_settings
-from .utils.fingerprint import filter_new_apartments
-from .utils.storage import load_existing_apartments, save_new_apartments_csv, save_to_json
+from .utils.fingerprint import drop_cross_posts, filter_new_apartments
+from .utils.storage import load_existing_apartments, save_new_apartments_csv, save_to_csv, save_to_json
 
 app = typer.Typer(help="Apartment scraper")
 console = Console()
@@ -25,6 +32,8 @@ SCRAPERS = {
     "chaves": ("CHAVES NA MÃO", ChavesScraper),
     "imovelweb": ("IMOVELWEB", ImovelWebScraper),
     "zap": ("ZAP IMÓVEIS", ZapScraper),
+    "leindecker": ("LEINDECKER", LeindeckerScraper),
+    "certa": ("CERTA", CertaScraper),
 }
 
 
@@ -83,11 +92,23 @@ def scrape(
     zap_url: Optional[List[str]] = typer.Option(
         None, "--zap-url", "-z", help="Zap Imóveis search URL (repeatable; replaces the built one)"
     ),
+    leindecker_url: Optional[List[str]] = typer.Option(
+        None,
+        "--leindecker-url",
+        help="Leindecker search URL ending with its page number, e.g. …/1/ (repeatable; replaces the built one)",
+    ),
+    certa_url: Optional[List[str]] = typer.Option(
+        None,
+        "--certa-url",
+        help="Certa search URL ending with its page number, e.g. …/1/ (repeatable; replaces the built one)",
+    ),
     json_file: Optional[str] = typer.Option(
         None, "--json", "-j", help="Output JSON file path (default: apartamentos.json)"
     ),
     csv_file: Optional[str] = typer.Option(
-        None, "--csv", help="Output CSV file path (default: timestamped)"
+        None,
+        "--csv",
+        help="CSV mirror of the whole JSON file, rewritten each run (default: a timestamped CSV of this run's new listings)",
     ),
     max_pages: Optional[int] = typer.Option(
         None, "--max-pages", "-m", help="Maximum number of pages to scrape per URL"
@@ -97,6 +118,8 @@ def scrape(
     skip_chaves: bool = typer.Option(False, "--skip-chaves", help="Skip Chaves na Mão scraping"),
     skip_imovelweb: bool = typer.Option(False, "--skip-imovelweb", help="Skip ImovelWeb scraping"),
     skip_zap: bool = typer.Option(False, "--skip-zap", help="Skip Zap Imóveis scraping"),
+    skip_leindecker: bool = typer.Option(False, "--skip-leindecker", help="Skip Leindecker scraping"),
+    skip_certa: bool = typer.Option(False, "--skip-certa", help="Skip Certa scraping"),
 ):
 
     setup_logging(verbose=verbose)
@@ -128,12 +151,26 @@ def scrape(
         console.print(f"[red]Invalid configuration:[/red]\n{e}")
         raise typer.Exit(code=2)
 
-    cli_urls = {"vivareal": vivareal_url, "chaves": chaves_url, "imovelweb": imovelweb_url, "zap": zap_url}
-    skipped = {"vivareal": skip_vivareal, "chaves": skip_chaves, "imovelweb": skip_imovelweb, "zap": skip_zap}
+    cli_urls = {
+        "vivareal": vivareal_url,
+        "chaves": chaves_url,
+        "imovelweb": imovelweb_url,
+        "zap": zap_url,
+        "leindecker": leindecker_url,
+        "certa": certa_url,
+    }
+    skipped = {
+        "vivareal": skip_vivareal,
+        "chaves": skip_chaves,
+        "imovelweb": skip_imovelweb,
+        "zap": skip_zap,
+        "leindecker": skip_leindecker,
+        "certa": skip_certa,
+    }
     site_urls = {
         site: search.resolve_urls(site, settings, list(cli_urls[site] or []))
         for site in search.SITES
-        if not skipped[site]
+        if site in settings.sites and not skipped[site]
     }
     if not any(site_urls.values()):
         console.print(
@@ -145,7 +182,7 @@ def scrape(
     console.print("\n[bold blue]Apartment Scraper[/bold blue]\n")
 
     console.print("Loading existing apartments...")
-    existing_links, existing_fingerprints = load_existing_apartments(
+    existing_links, existing_fingerprints, existing_refs = load_existing_apartments(
         settings.json_file, settings.csv_file or "apartamentos.csv"
     )
     console.print(
@@ -160,7 +197,8 @@ def scrape(
         if not urls:
             console.print(
                 f"[yellow]Skipping {label}: nothing to search (set places for VivaReal/Zap, "
-                "neighborhoods for Chaves/ImovelWeb, or pass a URL)[/yellow]\n"
+                "neighborhoods for Chaves/ImovelWeb, Porto Alegre neighborhoods for "
+                "Leindecker/Certa (Certa: aluguel only), or pass a URL)[/yellow]\n"
             )
             continue
 
@@ -179,6 +217,13 @@ def scrape(
     console.print(f"[bold]Total apartments found:[/bold] [green]{len(all_apartments)}[/green]")
     console.print(f"{'='*50}\n")
 
+    # A ref is known once any of its copies was saved, even by a run that didn't record refs.
+    existing_refs.update(
+        a["agency_ref"] for a in all_apartments if a.get("agency_ref") and a["link"] in existing_links
+    )
+    found = len(all_apartments)
+    all_apartments = drop_cross_posts(all_apartments)
+    console.print(f"Cross-posted copies dropped: [yellow]{found - len(all_apartments)}[/yellow]")
     search.annotate(all_apartments, settings)
     matching = search.apply_criteria(all_apartments, settings)
     console.print(
@@ -186,19 +231,18 @@ def scrape(
         f"(dropped {len(all_apartments) - len(matching)})"
     )
 
-    new_apartments = filter_new_apartments(matching, existing_links, existing_fingerprints)
+    new_apartments = filter_new_apartments(matching, existing_links, existing_fingerprints, existing_refs)
 
     console.print(f"New apartments: [green]{len(new_apartments)}[/green]")
     console.print(f"Duplicates filtered: [yellow]{len(matching) - len(new_apartments)}[/yellow]\n")
 
     if new_apartments:
-        save_to_json(new_apartments, settings.json_file)
+        saved = save_to_json(new_apartments, settings.json_file)
         console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
 
         if settings.csv_file:
-            from .utils.storage import save_to_csv
-            save_to_csv(new_apartments, settings.csv_file)
-            console.print(f"Data saved to CSV: [green]{settings.csv_file}[/green]")
+            save_to_csv(saved, settings.csv_file)
+            console.print(f"Data saved to CSV: [green]{settings.csv_file}[/green] ({len(saved)} listings)")
         else:
             csv_filename = save_new_apartments_csv(new_apartments)
             if csv_filename:
@@ -246,6 +290,8 @@ def info():
     console.print("  • Chaves na Mão (chavesnamao.com.br)")
     console.print("  • ImovelWeb (imovelweb.com.br)")
     console.print("  • Zap Imóveis (zapimoveis.com.br)")
+    console.print("  • Leindecker (leindecker.com.br)")
+    console.print("  • Certa (certa.com.br)")
     console.print("\nUse [cyan]puxa-apto scrape --help[/cyan] for usage information.")
 
 

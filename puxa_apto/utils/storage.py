@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 def load_existing_apartments(
     json_file: str = "apartamentos.json", csv_file: str = "apartamentos.csv"
-) -> Tuple[Set[str], Set[str]]:
+) -> Tuple[Set[str], Set[str], Set[str]]:
     existing_links = set()
     existing_fingerprints = set()
+    existing_refs = set()
 
     if os.path.exists(json_file):
         try:
@@ -26,6 +27,8 @@ def load_existing_apartments(
                     link = apt.get("link", "")
                     if link:
                         existing_links.add(link)
+                    if apt.get("agency_ref"):
+                        existing_refs.add(apt["agency_ref"])
                     fingerprint = create_apartment_fingerprint(apt)
                     if fingerprint:
                         existing_fingerprints.add(fingerprint)
@@ -40,6 +43,8 @@ def load_existing_apartments(
                     link = row.get("link", "")
                     if link:
                         existing_links.add(link)
+                    if row.get("agency_ref"):
+                        existing_refs.add(row["agency_ref"])
 
                     apt_dict = {
                         "street": row.get("street", ""),
@@ -67,25 +72,25 @@ def load_existing_apartments(
         except Exception as e:
             logger.warning(f"Error loading {csv_file}: {e}")
 
-    return existing_links, existing_fingerprints
+    return existing_links, existing_fingerprints, existing_refs
 
 
-def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> None:
-    if not apartments:
-        logger.info("No data to save to JSON.")
-        return
-
+def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") -> List[Dict]:
+    """Append to the JSON file (the accumulated history) and return its full contents."""
+    saved = []
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
-            existing_data = json.load(f)
-        existing_data.extend(apartments)
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=2)
-    else:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(apartments, f, ensure_ascii=False, indent=2)
+            saved = json.load(f)
+    if not apartments:
+        logger.info("No data to save to JSON.")
+        return saved
+
+    saved.extend(apartments)
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(saved, f, ensure_ascii=False, indent=2)
 
     logger.info(f"Data saved to JSON: {filename} ({len(apartments)} new records)")
+    return saved
 
 
 def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> None:
@@ -95,8 +100,11 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
 
     fieldnames = [
         "link",
+        "agency_ref",
+        "title",
         "street",
         "neighborhood",
+        "city",
         "area",
         "bedrooms",
         "bathrooms",
@@ -109,7 +117,9 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
     ]
     # One distance column per reference place, named after it, in first-seen order.
     fieldnames += dict.fromkeys(k for apt in apartments for k in apt if k.startswith("distance_km_"))
-    fieldnames += ["amenity_codes", "description"]
+    fieldnames += ["approximate_location", "lat", "lon", "amenity_codes", "description", "images"]
+    # Any other field the listings carry, so the CSV holds everything the JSON does.
+    fieldnames += [k for k in dict.fromkeys(k for apt in apartments for k in apt) if k not in fieldnames]
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -122,7 +132,7 @@ def save_to_csv(apartments: List[Dict], filename: str = "apartamentos.csv") -> N
                 row[field] = ";".join(value) if isinstance(value, list) else value
             writer.writerow(row)
 
-    logger.info(f"Data saved to CSV: {filename} ({len(apartments)} new records)")
+    logger.info(f"Data saved to CSV: {filename} ({len(apartments)} records)")
 
 
 def save_new_apartments_csv(apartments: List[Dict]) -> str: 

@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from bs4 import BeautifulSoup
 
 from ..utils import web
+from ..utils.text import slugify
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,9 @@ _NEXT_F = re.compile(r'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)')
 _RSC_ROW = re.compile(rb"([0-9a-f]+):")
 _RSC_TEXT = re.compile(rb"T([0-9a-f]+),")
 _RSC_REF = re.compile(r"^\$([0-9a-f]+)$")
+# Agencies whose own sites we scrape: slug prefix of the portal advertiser name -> site.
+_AGENCY_ADVERTISERS = {"leindecker-": "leindecker", "certa-": "certa"}
+_AGENCY_CODE = re.compile(r"L0*(\d+)")
 
 
 def _walk(node):
@@ -60,9 +64,21 @@ def valid_point(lat, lon) -> bool:
     return numbers and not (abs(lat) < 1 and abs(lon) < 1)
 
 
+def agency_ref(advertiser: Optional[str], external_id: Optional[str]) -> Optional[str]:
+    """"certa:2270" for a portal listing by "Certa Aluguéis - Condomínios" with externalId "L02270";
+    None unless the advertiser is an agency we scrape and the id is its code."""
+    slug = slugify(advertiser or "")
+    site = next((s for prefix, s in _AGENCY_ADVERTISERS.items() if slug.startswith(prefix)), None)
+    match = _AGENCY_CODE.fullmatch(external_id or "")
+    return f"{site}:{match.group(1)}" if site and match else None
+
+
 def merge_details(apartment: Dict, details: Dict[str, Dict]) -> None:
-    """Give the apartment its page details (coordinates, description, amenity codes)."""
-    apartment.update(lat=None, lon=None, description="", amenity_codes=[])
+    """Give the apartment its page details (coordinates, description, amenity codes, agency_ref,
+    approximate_location)."""
+    apartment.update(
+        lat=None, lon=None, description="", amenity_codes=[], agency_ref=None, approximate_location=False
+    )
     apartment.update(details.get(listing_id(apartment["link"]) or "", {}))
 
 
@@ -191,6 +207,9 @@ class BaseScraper(ABC):
                 entry = {
                     "description": description if isinstance(description, str) else "",
                     "amenity_codes": [str(v) for v in values] if isinstance(values, list) else [],
+                    "agency_ref": agency_ref(_dig(obj, "advertiser", "name"), obj.get("externalId")),
+                    # Hidden address: the portal gives a rounded placeholder point, not the flat's.
+                    "approximate_location": _dig(obj, "address", "isApproximateLocation") is True,
                 }
                 lat = _dig(obj, "address", "coordinates", "latitude")
                 lon = _dig(obj, "address", "coordinates", "longitude")

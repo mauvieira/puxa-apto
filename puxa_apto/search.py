@@ -1,11 +1,11 @@
 from math import asin, cos, radians, sin, sqrt
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, get_args
 from urllib.parse import urlencode
 
-from .settings import Place, Point, SearchSettings
+from .settings import Place, Point, SearchSettings, SiteName
 from .utils.text import slugify
 
-SITES = ("vivareal", "chaves", "imovelweb", "zap")
+SITES = get_args(SiteName)
 EARTH_RADIUS_KM = 6371.0
 
 
@@ -104,11 +104,61 @@ def _imovelweb(settings: SearchSettings) -> List[str]:
     return [f"https://www.imovelweb.com.br/apartamentos-{settings.transaction}-{slug}{suffix}.html"]
 
 
+def _porto_alegre(settings: SearchSettings) -> bool:
+    """Leindecker and Certa list only Porto Alegre, searched by neighborhood."""
+    return (
+        bool(settings.neighborhoods)
+        and slugify(settings.city or "") == "porto-alegre"
+        and (settings.state or "").upper() == "RS"
+    )
+
+
+def _agency_filters(settings: SearchSettings, bedrooms_key: str) -> str:
+    """Path-segment filters; both sites read bedrooms N as "N or more", so send the minimum."""
+    cap = _price_cap(settings)
+    segments = []
+    if cap is not None:
+        segments.append(f"valor_ate/{int(cap)}")
+    if settings.min_area is not None:
+        segments.append(f"area/{settings.min_area}")
+    if settings.bedrooms:
+        segments.append(f"{bedrooms_key}/{min(settings.bedrooms)}")
+    return "/".join(segments) + "/" if segments else ""
+
+
+def _leindecker(settings: SearchSettings) -> List[str]:
+    if not _porto_alegre(settings):
+        return []
+    mode = {"aluguel": "alugar", "venda": "comprar"}[settings.transaction]
+    cats = {"aluguel": "apartamentos_jk-lofts_studios", "venda": "apartamentos_jk-loft-kitnet"}[
+        settings.transaction
+    ]
+    hoods = "_".join(slugify(n) for n in settings.neighborhoods)
+    return [
+        f"https://www.leindecker.com.br/busca/{mode}/cidade/porto-alegre/bairros/{hoods}/categorias/{cats}/"
+        + _agency_filters(settings, "dormitorios")
+        + "1/"
+    ]
+
+
+def _certa(settings: SearchSettings) -> List[str]:
+    if not _porto_alegre(settings) or settings.transaction != "aluguel":
+        return []
+    hoods = "_".join(slugify(n) + "-porto-alegre" for n in settings.neighborhoods)
+    return [
+        f"https://www.certa.com.br/busca/alugar/categorias/apartamentos_kitnet-jk_studios/bairros/{hoods}/"
+        + _agency_filters(settings, "quartos")
+        + "1/"
+    ]
+
+
 _URL_BUILDERS: Dict[str, Callable[[SearchSettings], List[str]]] = {
     "vivareal": _vivareal,
     "zap": _zap,
     "chaves": _chaves,
     "imovelweb": _imovelweb,
+    "leindecker": _leindecker,
+    "certa": _certa,
 }
 
 
@@ -133,8 +183,9 @@ def annotate(apartments: List[Dict], settings: SearchSettings) -> None:
 
 
 def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dict]:
-    """Drop listings whose known values violate the filters or lie beyond radius_km of every
-    place; unknown values are kept."""
+    """Drop listings whose known values violate the filters. With places set, a listing must be
+    within radius_km of one: no coordinates means not known to be near, so it's dropped too.
+    Other unknown values (price, area, ...) are kept."""
     excluded = {slugify(n) for n in settings.exclude_neighborhoods}
 
     def keep(apt: Dict) -> bool:
@@ -142,7 +193,7 @@ def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dic
             return False
         price, area, bedrooms = apt.get("price"), apt.get("area"), apt.get("bedrooms")
         distance, total = apt.get("distance_km"), apt.get("total_price")
-        if settings.places and distance is not None and distance > settings.radius_km:
+        if settings.places and (distance is None or distance > settings.radius_km):
             return False
         if settings.max_price is not None and price is not None and price > settings.max_price:
             return False

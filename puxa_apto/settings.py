@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Type
+from typing import List, Literal, Optional, Tuple, Type, get_args
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
@@ -10,6 +10,8 @@ from pydantic_settings import (
 )
 
 from .utils.text import slugify
+
+SiteName = Literal["vivareal", "chaves", "imovelweb", "zap", "leindecker", "certa"]
 
 
 class Point(BaseModel):
@@ -26,6 +28,8 @@ class SiteUrls(BaseModel):
     zap: List[str] = []
     chaves: List[str] = []
     imovelweb: List[str] = []
+    leindecker: List[str] = []
+    certa: List[str] = []
 
 
 class SearchSettings(BaseSettings):
@@ -51,6 +55,8 @@ class SearchSettings(BaseSettings):
     min_area: Optional[int] = None
     bedrooms: List[int] = []
     urls: SiteUrls = SiteUrls()  # explicit per-site URLs; replace the built ones
+    # which sites run; default all
+    sites: List[SiteName] = Field(default_factory=lambda: list(get_args(SiteName)), min_length=1)
     max_pages: Optional[int] = None
     json_file: str = "apartamentos.json"
     csv_file: Optional[str] = None
