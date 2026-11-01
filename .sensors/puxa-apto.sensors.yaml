@@ -1,0 +1,50 @@
+version: 1
+prompt: >-
+  Read `.sensors/cli.sh check .` instead of running ruff, pyright or pytest by hand.
+  `tests`, `lint`, `types` and `shape` must be green before you finish; fix what they report
+  near code you touched even if you did not introduce it, unless the fix is large or risky. In
+  that case say so. Thresholds are review triggers from Ousterhout's A Philosophy of Software
+  Design: prefer deep functions over chains of small conjoined helpers, and raise a
+  `# sensors:` ceiling only with a reason. `cov` is informational.
+runners:
+  - name: tests
+    parser: pytest
+    mode: interval
+    interval: 17000
+    command: .venv/bin/python -m pytest -q -n auto -p no:cacheprovider
+  - name: lint
+    parser: ruff
+    mode: interval
+    interval: 11000
+    command: .venv/bin/python tools/ruff_sensor.py puxa_apto tests tools
+  - name: types
+    parser: default
+    mode: interval
+    interval: 29000
+    command: .venv/bin/python tools/pyright_sensor.py
+  - name: shape
+    parser: default
+    mode: interval
+    interval: 13000
+    command: .venv/bin/python tools/code_shape.py --shape puxa_apto tools --reasons puxa_apto tools tests
+  - name: cov
+    parser: pytest_cov
+    mode: interval
+    interval: 61000
+    command: .venv/bin/python -m pytest -q -n auto -p no:cacheprovider --cov=puxa_apto --cov-report=term-missing
+  # Mutation testing is PARKED (2026-11); revisit later. A cold `mutmut run` over utils/,
+  # search.py and models/ (1176 mutants) took an estimated 35-40 min on 8 cores: every mutant's
+  # covering tests were the CLI acceptance tests (full scrape, 0.5-5.6 s each), and each survivor
+  # paid all 16 of them. The sidecar also fires triggered runners on every `start`. The full
+  # reasoning, the unit-tests-only speed-up (29 s per cold run) and the revival steps are in the
+  # comment above [tool.mutmut] in pyproject.toml.
+  - name: mutation
+    parser: default
+    enabled: false
+    mode: triggered
+    commandTimeout: 1800
+    command: .venv/bin/python tools/mutation_sensor.py run
+  - name: mut_state
+    enabled: false
+    mode: on_check
+    command: .venv/bin/python tools/mutation_sensor.py summary

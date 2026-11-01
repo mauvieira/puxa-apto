@@ -62,7 +62,7 @@ class LeindeckerScraper(AgencyScraper):
 
     def parse_detail(self, soup: BeautifulSoup) -> Dict:
         details = fees(
-            (li.small.get_text(strip=True), li.find("span").get_text(strip=True))
+            (li.small.get_text(strip=True), li.find("span").get_text(strip=True))  # pyright: ignore[reportOptionalMemberAccess] -- baseline: predates type checking
             for li in soup.select("li")
             if li.small and li.find("span")
         )

@@ -43,13 +43,13 @@ def _map_query(settings: SearchSettings) -> str:
     params = {
         "transacao": settings.transaction,
         "tipos": "apartamento_residencial",
-        "viewport": viewport(settings.places, settings.radius_km),
+        "viewport": viewport(settings.places, settings.radius_km),  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
     }
     cap = _price_cap(settings)
     if cap is not None:
-        params["precoMaximo"] = int(cap)
+        params["precoMaximo"] = int(cap)  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
     if settings.min_area is not None:
-        params["areaMinima"] = settings.min_area
+        params["areaMinima"] = settings.min_area  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
     if settings.bedrooms:
         params["quartos"] = ",".join(str(b) for b in sorted(settings.bedrooms))
     return urlencode(params)
@@ -76,7 +76,7 @@ def chaves_urls(settings: SearchSettings) -> List[str]:
     segment = {"aluguel": "apartamentos-para-alugar", "venda": "apartamentos-a-venda"}[
         settings.transaction
     ]
-    place = f"{settings.state.lower()}-{slugify(settings.city)}"
+    place = f"{settings.state.lower()}-{slugify(settings.city)}"  # pyright: ignore[reportOptionalMemberAccess, reportArgumentType] -- baseline: predates type checking
     cap = _price_cap(settings)
     parts = []
     if cap is not None:
@@ -93,7 +93,7 @@ def chaves_urls(settings: SearchSettings) -> List[str]:
 def imovelweb_urls(settings: SearchSettings) -> List[str]:
     if not settings.neighborhoods:
         return []
-    city = slugify(settings.city)
+    city = slugify(settings.city)  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
     slug = "-".join(f"{slugify(n)}-{city}" for n in settings.neighborhoods)
     cap = _price_cap(settings)
     filters = []
@@ -155,7 +155,7 @@ def certa_urls(settings: SearchSettings) -> List[str]:
     ]
 
 
-def annotate(apartments: List[Dict], settings: SearchSettings) -> None:
+def annotate(apartments: List[Dict], settings: SearchSettings) -> None:  # sensors: complexity=11 -- baseline: predates sensors; lower via refactor-tick
     """Add total_price (rent + condo), each listing's distance to every place, and to the
     nearest one (`distance_km`)."""
     columns = [(place, distance_column(place)) for place in settings.places]
@@ -165,7 +165,7 @@ def annotate(apartments: List[Dict], settings: SearchSettings) -> None:
         lat, lon = apt.get("lat"), apt.get("lon")
         known = lat is not None and lon is not None
         for place, column in columns:
-            apt[column] = round(haversine_km(place, lat, lon), 2) if known else None
+            apt[column] = round(haversine_km(place, lat, lon), 2) if known else None  # pyright: ignore[reportArgumentType] -- baseline: predates type checking
         distances = [apt[column] for _, column in columns if apt[column] is not None]
         apt["distance_km"] = min(distances) if distances else None
 
@@ -176,7 +176,7 @@ def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dic
     Other unknown values (price, area, ...) are kept."""
     excluded = {slugify(n) for n in settings.exclude_neighborhoods}
 
-    def keep(apt: Dict) -> bool:
+    def keep(apt: Dict) -> bool:  # sensors: complexity=17 -- baseline: predates sensors; lower via refactor-tick
         if slugify(apt.get("neighborhood") or "") in excluded:
             return False
         price, area, bedrooms = apt.get("price"), apt.get("area"), apt.get("bedrooms")
@@ -189,8 +189,8 @@ def apply_criteria(apartments: List[Dict], settings: SearchSettings) -> List[Dic
             return False
         if settings.min_area is not None and area is not None and area < settings.min_area:
             return False
-        if settings.bedrooms and bedrooms is not None and bedrooms not in settings.bedrooms:
-            return False
-        return True
+        return not (
+            settings.bedrooms and bedrooms is not None and bedrooms not in settings.bedrooms
+        )
 
     return [apt for apt in apartments if keep(apt)]

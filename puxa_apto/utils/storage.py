@@ -13,7 +13,7 @@ from .fingerprint import create_apartment_fingerprint
 logger = logging.getLogger(__name__)
 
 
-def load_existing_apartments(
+def load_existing_apartments(  # sensors: complexity=19, nesting=5 -- baseline: predates sensors; lower via refactor-tick
     json_file: str = "apartamentos.json", csv_file: str = "apartamentos.csv"
 ) -> Tuple[Set[str], Set[str], Set[str]]:
     existing_links = set()

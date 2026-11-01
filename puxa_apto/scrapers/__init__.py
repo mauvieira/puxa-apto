@@ -10,10 +10,10 @@ from .certa import CertaScraper
 
 __all__ = [
     "BaseScraper",
-    "VivaRealScraper",
-    "ZapScraper",
+    "CertaScraper",
     "ChavesScraper",
     "ImovelWebScraper",
     "LeindeckerScraper",
-    "CertaScraper",
+    "VivaRealScraper",
+    "ZapScraper",
 ]

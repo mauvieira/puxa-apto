@@ -9,7 +9,7 @@ from ..models.apartment import Apartment
 logger = logging.getLogger(__name__)
 
 
-def create_apartment_fingerprint(
+def create_apartment_fingerprint(  # sensors: complexity=20, statements=46 -- baseline: predates sensors; lower via refactor-tick
     apt: Dict, require_all_fields: bool = False
 ) -> Optional[str]:
     if isinstance(apt, Apartment):
@@ -28,18 +28,14 @@ def create_apartment_fingerprint(
     if not street or not neighborhood:
         return None
 
-    if require_all_fields:
-        if not area or not bedrooms or not price:
-            return None
+    if require_all_fields and (not area or not bedrooms or not price):
+        return None
 
     street_normalized = re.sub(r"[^\w\s]", "", street)
     street_normalized = re.sub(r"\s+", " ", street_normalized).strip()
 
     street_parts = street_normalized.split()
-    if len(street_parts) > 0:
-        street_key = " ".join(street_parts[:3])
-    else:
-        street_key = street_normalized[:40]
+    street_key = " ".join(street_parts[:3]) if street_parts else street_normalized[:40]
 
     neighborhood_normalized = re.sub(r"[^\w\s]", "", neighborhood)
     neighborhood_normalized = re.sub(r"\s+", " ", neighborhood_normalized).strip()
@@ -85,7 +81,7 @@ def create_apartment_fingerprint(
 _EMPTY = (None, "", [])
 
 
-def drop_cross_posts(apartments: List[Dict]) -> List[Dict]:
+def drop_cross_posts(apartments: List[Dict]) -> List[Dict]:  # sensors: complexity=13 -- baseline: predates sensors; lower via refactor-tick
     """Keep one listing per agency_ref: the agency's own copy when present, else the first seen.
 
     The kept copy's empty fields are filled from the dropped ones, e.g. coordinates the
@@ -108,7 +104,7 @@ def drop_cross_posts(apartments: List[Dict]) -> List[Dict]:
     return [a for a in apartments if not a.get("agency_ref") or kept[a["agency_ref"]] is a]
 
 
-def filter_new_apartments(
+def filter_new_apartments(  # sensors: function-lines=66, complexity=24, statements=50 -- baseline: predates sensors; lower via refactor-tick
     apartments: List[Dict],
     existing_links: Set[str],
     existing_fingerprints: Set[str],
