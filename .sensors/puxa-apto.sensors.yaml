@@ -16,7 +16,7 @@ runners:
     parser: ruff
     mode: interval
     interval: 11000
-    command: .venv/bin/ruff check --output-format json puxa_apto tests tools
+    command: .venv/bin/python tools/ruff_sensor.py puxa_apto tests tools
   - name: types
     parser: default
     mode: interval

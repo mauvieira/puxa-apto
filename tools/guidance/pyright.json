@@ -1,0 +1,25 @@
+{
+  "_about": "Self-correction guidance for pyright diagnostics, keyed by rule name. tools/pyright_sensor.py ships only the entries for rules that fired; a rule missing here falls back to `default`.",
+
+  "reportAttributeAccessIssue": "The attribute does not exist on the declared type. Check for a typo first. With BeautifulSoup, `find()` returns `Tag | NavigableString | None`: narrow with `isinstance(node, Tag)` before reading `.get_text()`, `.attrs` or children.",
+  "reportOptionalMemberAccess": "An attribute is read on a value that can be None (a `find()` with no match, a missing dict key, an optional setting). Handle the None case first: a guard clause (`if node is None: return None`), a default, or normalize the value once at the boundary. Do not silence it: this is a real crash path when a site changes its markup.",
+  "reportOptionalSubscript": "Indexing a value that can be None. Guard it (`if value is None: ...`) or give it a default before subscripting.",
+  "reportOptionalIterable": "Iterating a value that can be None. Default it to an empty collection where it is produced (`or []`), so every consumer can loop safely.",
+  "reportOptionalOperand": "An arithmetic or comparison operand can be None. Decide what None means here (unknown price, missing area) and branch on it explicitly before the operation.",
+  "reportArgumentType": "An argument's type does not match the parameter. Fix the caller when the value is wrong; widen the parameter type when the callee really accepts more (e.g. `str | None`) and then handle the extra case inside. BeautifulSoup's stubs reject lambda filters in `find`/`find_all`: prefer `class_=re.compile(...)` or a CSS selector with `select()`.",
+  "reportCallIssue": "No overload of the called function accepts these arguments. Read the full message for which parameter fails. For BeautifulSoup `find`/`find_all` with lambda or dict filters, rewrite the filter with `re.compile(...)` or `select()` instead of suppressing.",
+  "reportReturnType": "A code path returns a value of the wrong type, or falls off the end and returns None. Make every path return the declared type, or declare `-> X | None` and make callers handle None.",
+  "reportAssignmentType": "The assigned value does not match the variable's declared type. Fix the value, or the annotation if the annotation is what is wrong.",
+  "reportIncompatibleMethodOverride": "A subclass method's signature differs from the base class (parameter names, count or types). Callers that use the base type will break. Match the base signature exactly; if the subclass genuinely needs a different input, the base signature is wrong for all subclasses, so change it there.",
+  "reportIndexIssue": "The object does not support this index operation. Check the type at this point; you may be indexing a Tag attribute value that can be a list, or a None.",
+  "reportPossiblyUnbound": "The variable is only assigned in some branches (or inside a try), so another path reads it before it exists. Assign a default before the branch, or restructure so every path assigns it.",
+  "reportRedeclaration": "The same name is declared twice with different types. Rename one of them.",
+  "reportOperatorIssue": "The operator is not supported for these operand types (often `None + x` or `str < int`). Normalize the operands to one type first.",
+  "reportTypedDictNotRequiredAccess": "Reading a TypedDict key that is not required. Use `.get(key)` and handle the missing case.",
+  "reportMissingImports": "The import cannot be resolved. Install the dependency into `.venv` and add it to pyproject.toml, or fix the module path.",
+  "reportMissingModuleSource": "Stubs exist but the package is not installed in `.venv`. Install it (`.venv/bin/pip install -e '.[dev]'`).",
+  "reportPrivateImportUsage": "Importing a name the library does not export publicly. Import it from the module that exports it.",
+  "reportUnnecessaryTypeIgnoreComment": "A `# pyright: ignore` / `# type: ignore` no longer suppresses anything. Delete it, and its baseline note with it: the code got better and the ratchet should record that.",
+
+  "default": "Pyright found a type error: a value can be of a type this code does not handle, which is a runtime failure waiting for the right input. Fix the code (narrow with isinstance/None checks, correct the annotation, or change the caller). Suppress only when the stubs are wrong, on that line, with a reason: `# pyright: ignore[ruleName] -- <why>`."
+}

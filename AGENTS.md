@@ -14,8 +14,8 @@ Run everything from the repo root with the project venv (Python 3.12.1 from `.py
 python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 
 .venv/bin/python -m pytest -q -n auto      # offline tests, parallel
-.venv/bin/ruff check puxa_apto tests tools # lint
-.venv/bin/pyright                          # types
+.venv/bin/python tools/ruff_sensor.py puxa_apto tests tools  # lint, with fix guidance
+.venv/bin/python tools/pyright_sensor.py                     # types, with fix guidance
 .venv/bin/python tools/code_shape.py --shape puxa_apto tools --reasons puxa_apto tools tests
 ```
 
@@ -43,7 +43,7 @@ sidecar is not running.
 | runner | tool | role |
 |---|---|---|
 | `tests` | pytest `-n auto` | gates |
-| `lint` | ruff | gates |
+| `lint` | ruff via `tools/ruff_sensor.py` | gates |
 | `types` | pyright via `tools/pyright_sensor.py` | gates |
 | `shape` | `tools/code_shape.py` | gates |
 | `cov` | pytest-cov | informational |
@@ -56,6 +56,18 @@ it is revisited.
 
 The sidecar's socket lives at `<project>/.sensors/puxa-apto.sock`, and Linux caps socket paths
 at 108 bytes. Keep worktrees at shallow paths or `start` fails.
+
+### Guidance: what the report tells you to do
+
+A failing `lint`, `types` or `shape` report shows the findings and then one guidance block for
+each rule that fired: why the rule matters here and how to fix it, including when a suppression
+is legitimate and how to write it. Rules that did not fire are not printed, so a clean run stays
+quiet. Read the block before fixing. Do not just make the message go away.
+
+The text is data in `tools/guidance/`: `ruff.json` (by rule code, falling back to the family:
+`F`, `E`, `B`, `SIM`, `RUF`, `PERF`), `pyright.json` (by rule name, falling back to `default`)
+and `shape.json`. When a finding keeps recurring, or the advice was wrong for this codebase,
+improve its entry there. One edit changes what every agent reads from then on.
 
 ## Code shape
 

@@ -47,52 +47,9 @@ REASON = re.compile(r"--\s+\S")
 DIRECTIVE_ITEM = re.compile(r"^([A-Za-z-]+)=(\S*)$")
 DIRECTIVE_PREFIX = "sensors:"
 
-GUIDANCE = {
-    "function-lines": (
-        "Over 60 lines is a prompt to look, not an order to split. Ousterhout: depth is more "
-        "important than length. Extract only a self-contained subtask whose caller does not need "
-        "to know how it works. Never create conjoined helpers that must be read together or that "
-        "pass state back and forth. If the function reads well as one unit, raise its ceiling on "
-        "the def line: `# sensors: function-lines=N -- <why it reads as one unit>`. Raising is "
-        "the exception."
-    ),
-    "complexity": (
-        "Too many paths to hold in your head. First try to define special cases out of "
-        "existence: defaults instead of None checks, normalize input once at the boundary, a "
-        "lookup table instead of an if/elif chain. Raise the ceiling only as a last resort, with "
-        "a reason."
-    ),
-    "params": (
-        "More than 5 parameters usually means values that travel together (make a dataclass) or "
-        "pass-through variables (move the decision into the callee). Typer command functions are "
-        "the exception: their parameters are the CLI surface, so ceiling them with that reason."
-    ),
-    "statements": (
-        "Over 40 statements: the function probably mixes levels of abstraction. Look for a run of "
-        "steps that forms one named, self-contained operation."
-    ),
-    "nesting": (
-        "Deeper than 4: use guard clauses and early continue/return, or extract the innermost "
-        "loop body into a function that returns a value."
-    ),
-    "file-lines": (
-        "A file over 400 lines is fine if it is one deep module. Check cohesion: does everything "
-        "here hide the same design decision? If yes, add `# sensors: file-lines=N -- <the "
-        "decision it hides>`. If not, split by design decision, not by size."
-    ),
-    "ceiling-stale": (
-        "The code improved. Lower or delete the ceiling exactly as the message says, so the "
-        "ratchet keeps holding."
-    ),
-    "suppression-reason": (
-        "Every `# noqa`, `# pyright: ignore`, `# type: ignore` and `# sensors:` needs ` -- "
-        "<reason>` so the exception is visible and reviewable."
-    ),
-    "sensors-directive": (
-        "Malformed ceiling. Syntax: `# sensors: key=INT[, key=INT] -- reason` on the def line "
-        "(function keys) or on its own comment line (`file-lines`)."
-    ),
-}
+# The text an agent reads to correct itself, one entry per rule; shared format with the other
+# sensors in tools/guidance/.
+GUIDANCE = json.loads((Path(__file__).parent / "guidance" / "shape.json").read_text("utf-8"))
 
 
 @dataclass

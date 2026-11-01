@@ -7,6 +7,7 @@
 .env
 !buscas/*.json
 !.claude/settings.json
+!tools/guidance/*.json
 .coverage
 .coverage.*
 mutants/
