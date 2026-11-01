@@ -94,6 +94,7 @@ def save_to_json(apartments: List[Dict], filename: str = "apartamentos.json") ->
 
 
 def csv_fieldnames(apartments: List[Dict]) -> List[str]:
+    """CSV columns for `apartments`: fixed fields, one distance column per place, then any other key."""
     fieldnames = [
         "link",
         "agency_ref",

@@ -6,21 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from puxa_apto.sites import SITES
 from puxa_apto.utils import web
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
-_FIXTURE_BY_HOST = {
-    "vivareal.com.br": "vivareal.html.gz",
-    "zapimoveis.com.br": "zap.html.gz",
-    "chavesnamao.com.br": "chaves.html.gz",
-    "imovelweb.com.br": "imovelweb.html.gz",
-    "leindecker.com.br": "leindecker.html.gz",
-    "certa.com.br": "certa.html.gz",
-}
+_FIXTURE_BY_HOST = {site.host: f"{key}.html.gz" for key, site in SITES.items()}
 _DETAIL_FIXTURE_BY_HOST = {
-    "leindecker.com.br": "leindecker-detail.html.gz",
-    "certa.com.br": "certa-detail.html.gz",
+    site.host: f"{key}-detail.html.gz"
+    for key, site in SITES.items()
+    if (FIXTURES / f"{key}-detail.html.gz").exists()
 }
 _LATER_PAGE = re.compile(r"pagina|[?&]pg=")
 

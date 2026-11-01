@@ -1,7 +1,7 @@
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Type, get_args
+from typing import List, Literal, Optional, Tuple, Type
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic_settings import (
     BaseSettings,
     JsonConfigSettingsSource,
@@ -9,9 +9,10 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from .sites import SITES
 from .utils.text import slugify
 
-SiteName = Literal["vivareal", "chaves", "imovelweb", "zap", "leindecker", "certa"]
+SiteName = Literal[tuple(SITES)]
 
 
 class Point(BaseModel):
@@ -23,13 +24,8 @@ class Place(Point):
     name: str = Field(min_length=1)
 
 
-class SiteUrls(BaseModel):
-    vivareal: List[str] = []
-    zap: List[str] = []
-    chaves: List[str] = []
-    imovelweb: List[str] = []
-    leindecker: List[str] = []
-    certa: List[str] = []
+# one List[str] field per registered site (urls.zap, ...)
+SiteUrls = create_model("SiteUrls", **{key: (List[str], []) for key in SITES})
 
 
 class SearchSettings(BaseSettings):
@@ -56,7 +52,7 @@ class SearchSettings(BaseSettings):
     bedrooms: List[int] = []
     urls: SiteUrls = SiteUrls()  # explicit per-site URLs; replace the built ones
     # which sites run; default all
-    sites: List[SiteName] = Field(default_factory=lambda: list(get_args(SiteName)), min_length=1)
+    sites: List[SiteName] = Field(default_factory=lambda: list(SITES), min_length=1)
     max_pages: Optional[int] = None
     json_file: str = "apartamentos.json"
     csv_file: Optional[str] = None

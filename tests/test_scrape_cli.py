@@ -9,21 +9,16 @@ from urllib.parse import urlparse
 from typer.testing import CliRunner
 
 from puxa_apto.cli import app
+from puxa_apto.scrapers.agency import AgencyScraper
+from puxa_apto.sites import SITES
 from puxa_apto.utils.text import slugify
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FAMED = str(FIXTURES / "famed.json")
 FAMED_VIEWPORT = "viewport=-51.1941%2C-30.0262%7C-51.2223%2C-30.0511"
 FAMED_PLACE_COLUMNS = ("distance_km_famed", "distance_km_hcpa", "distance_km_hps", "distance_km_campus_saude")
-SITE_HOSTS = (
-    "vivareal.com.br",
-    "zapimoveis.com.br",
-    "chavesnamao.com.br",
-    "imovelweb.com.br",
-    "leindecker.com.br",
-    "certa.com.br",
-)
-AGENCY_HOSTS = ("leindecker.com.br", "certa.com.br")
+SITE_HOSTS = tuple(site.host for site in SITES.values())
+AGENCY_HOSTS = tuple(site.host for site in SITES.values() if issubclass(site.scraper, AgencyScraper))
 FAMED_LEINDECKER = (
     "https://www.leindecker.com.br/busca/alugar/cidade/porto-alegre/bairros/"
     "santa-cecilia_rio-branco_bom-fim_santana_farroupilha_independencia_moinhos-de-vento_jardim-botanico"
@@ -426,3 +421,12 @@ def test_listings_whose_portal_hides_the_address_are_flagged_as_approximate(fake
     assert flagged == {a["link"] for a in saved if any(f"id-{i}/" in a["link"] for i in approximate)}
     assert all(a["approximate_location"] is False for a in saved if a["link"] not in flagged)
     assert "approximate_location" in csv_header(tmp_path, "out")
+
+
+def test_site_url_flags_replace_only_that_sites_built_search(fake_sites, tmp_path):
+    zap = "https://www.zapimoveis.com.br/aluguel/?custom=1"
+    certa = "https://www.certa.com.br/busca/alugar/bairros/bom-fim-porto-alegre/1/"
+    run("-C", FAMED, "-m", "1", "-z", zap, "--certa-url", certa)
+    assert [url for url in fake_sites if "zapimoveis.com.br" in url] == [zap]
+    assert agency_searches(fake_sites, "certa.com.br") == [certa]
+    assert FAMED_LEINDECKER in fake_sites
