@@ -1,7 +1,7 @@
 import inspect
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import typer
 from pydantic import ValidationError
@@ -31,6 +31,19 @@ def _parse_place(value: str) -> dict:
     except ValueError as err:
         raise typer.BadParameter("expected NAME=LAT,LON, e.g. HCPA=-30.0387,-51.2066", param_hint="--place") from err
     return {"name": name.strip(), "lat": lat, "lon": lon}
+
+
+def _save_csv(new_apartments: List[Dict], csv_file: Optional[str]) -> None:
+    """Write this run's new listings: appended to `csv_file`, to a timestamped sibling when its
+    columns differ, or to a timestamped CSV of their own when no `csv_file` is configured."""
+    if not csv_file:
+        console.print(f"Data saved to CSV: [green]{save_new_apartments_csv(new_apartments)}[/green]")
+        return
+    written = append_to_csv(new_apartments, csv_file)
+    if written == csv_file:
+        console.print(f"Data appended to CSV: [green]{written}[/green] ({len(new_apartments)} listings)")
+    else:
+        console.print(f"[yellow]{csv_file} has different columns; new listings saved to {written}[/yellow]")
 
 
 def _with_site_flags(command):
@@ -65,7 +78,7 @@ def _with_site_flags(command):
 
 @app.command()
 @_with_site_flags
-def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements=77 -- baseline: predates sensors; lower via refactor-tick
+def scrape(  # sensors: function-lines=159, complexity=30, params=14, statements=70 -- baseline: predates sensors; lower via refactor-tick
     config: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -210,19 +223,7 @@ def scrape(  # sensors: function-lines=210, complexity=32, params=26, statements
     if new_apartments:
         save_to_json(new_apartments, settings.json_file)
         console.print(f"Data saved to JSON: [green]{settings.json_file}[/green]")
-
-        if settings.csv_file:
-            written = append_to_csv(new_apartments, settings.csv_file)
-            if written == settings.csv_file:
-                console.print(f"Data appended to CSV: [green]{written}[/green] ({len(new_apartments)} listings)")
-            else:
-                console.print(
-                    f"[yellow]{settings.csv_file} has different columns; new listings saved to {written}[/yellow]"
-                )
-        else:
-            csv_filename = save_new_apartments_csv(new_apartments)
-            if csv_filename:
-                console.print(f"Data saved to CSV: [green]{csv_filename}[/green]")
+        _save_csv(new_apartments, settings.csv_file)
 
         console.print("\n[bold]--- First 3 new apartments ---[/bold]")
         for i, apt in enumerate(new_apartments[:3], 1):

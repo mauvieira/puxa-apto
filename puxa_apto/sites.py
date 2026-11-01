@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 class Scraper(Protocol):
     """What the CLI needs from a scraper: BaseScraper and AgencyScraper subclasses both fit."""
 
+    def __init__(self, url: str) -> None: ...
+
     def scrape(self, max_pages: Optional[int] = None) -> List[Dict]: ...
 
 
@@ -32,7 +34,7 @@ class Site:
     label: str  # console heading, e.g. "ZAP IMÓVEIS"
     name: str  # in help texts and `info`, e.g. "Zap Imóveis"
     host: str  # e.g. "zapimoveis.com.br"; `info` and the test fixtures use it
-    scraper: Callable[[str], Scraper]  # built with one search URL
+    scraper: type[Scraper]  # built with one search URL
     build_urls: Callable[["SearchSettings"], List[str]]  # [] when the search lacks what `needs` names
     needs: str  # shown when the site is skipped for having nothing to search
     url_help: str  # help of --<key>-url

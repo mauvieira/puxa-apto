@@ -9,10 +9,10 @@ from puxa_apto.search import (
     apply_criteria,
     distance_column,
     haversine_km,
-    resolve_urls,
     viewport,
 )
 from puxa_apto.settings import Place, Point, SearchSettings
+from puxa_apto.sites import resolve_urls
 
 FAMED = Place(name="Famed", lat=-30.0330, lon=-51.2070)
 PORTO_ALEGRE = {"state": "RS", "city": "Porto Alegre", "neighborhoods": ["Santa Cecília", "Bom Fim"]}

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Type
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic_settings import (
@@ -25,7 +25,8 @@ class Place(Point):
 
 
 # one List[str] field per registered site (urls.zap, ...)
-SiteUrls = create_model("SiteUrls", **{key: (List[str], []) for key in SITES})
+_SITE_URL_FIELDS: Dict[str, Any] = {key: (List[str], []) for key in SITES}
+SiteUrls = create_model("SiteUrls", **_SITE_URL_FIELDS)
 
 
 class SearchSettings(BaseSettings):
@@ -50,9 +51,11 @@ class SearchSettings(BaseSettings):
     max_total: Optional[float] = Field(None, gt=0)  # rent + condo fee; a missing fee counts as 0
     min_area: Optional[int] = None
     bedrooms: List[int] = []
-    urls: SiteUrls = SiteUrls()  # explicit per-site URLs; replace the built ones
+    # SiteUrls and SiteName are generated from SITES at runtime, so pyright can't read them as
+    # types; pydantic validates against them (ADR 0001).
+    urls: SiteUrls = SiteUrls()  # pyright: ignore[reportInvalidTypeForm] -- generated from SITES; see comment above
     # which sites run; default all
-    sites: List[SiteName] = Field(default_factory=lambda: list(SITES), min_length=1)
+    sites: List[SiteName] = Field(default_factory=lambda: list(SITES), min_length=1)  # pyright: ignore[reportInvalidTypeForm] -- generated from SITES; see comment above
     max_pages: Optional[int] = None
     json_file: str = "apartamentos.json"
     csv_file: Optional[str] = None
