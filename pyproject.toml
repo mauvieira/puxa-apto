@@ -7,7 +7,7 @@ name = "puxa-apto"
 version = "1.0.0"
 description = "Apartment scraper"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Mauricio Vieira"}
@@ -17,19 +17,29 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "requests>=2.31.0",
+    "curl_cffi>=0.7",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
-    "selenium>=4.15.0",
     "typer>=0.9.0",
     "rich>=13.0.0",
+    "pydantic-settings>=2.6",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3.6",
+    "pytest-cov>=6",
+    "ruff>=0.8",
+    "pyright>=1.1.400",
+    "radon>=6",
+    "mutmut>=3.8",
 ]
 
 [project.scripts]
@@ -41,8 +51,48 @@ include = ["puxa_apto*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38']
+target-version = ['py310']
 
 [tool.isort]
 profile = "black"
 line_length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "SIM", "RUF", "PERF"]
+# PERF203: the per-listing try/except inside scraper loops is deliberate; one bad card must not abort a page.
+ignore = ["PERF203"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
+[tool.pyright]
+include = ["puxa_apto", "tests", "tools"]
+pythonVersion = "3.10"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+reportUnnecessaryTypeIgnoreComment = "error"
+
+# Mutation testing is PARKED (2026-11) because it was too heavy; revisit later. Measured: 1176
+# mutants, mean 17 s each with the CLI tests as their only coverage, about 35-40 min per cold run
+# on 8 cores. Fast unit tests for the pure modules cut killed mutants to about 0.1 s, but every
+# survivor still paid all 16 CLI tests (about 2 min each under load). The selection below runs
+# mutants against the unit tests only: one cold run then took 29 s (981 killed, 195 survived,
+# mostly log-message strings in filter_new_apartments). To revive: triage those survivors, then
+# set `enabled: true` on the `mutation` and `mut_state` runners in .sensors/puxa-apto.sensors.yaml.
+[tool.mutmut]
+source_paths = ["puxa_apto"]
+only_mutate = ["puxa_apto/utils/*", "puxa_apto/search.py", "puxa_apto/models/*"]
+do_not_mutate = ["puxa_apto/utils/web.py", "*/__init__.py"]
+pytest_add_cli_args_test_selection = [
+    "tests",
+    "--ignore=tests/test_scrape_cli.py",
+    "--ignore=tests/test_code_shape.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

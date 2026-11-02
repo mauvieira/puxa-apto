@@ -1,0 +1,14 @@
+{
+  "transaction": "aluguel",
+  "state": "RS",
+  "city": "Porto Alegre",
+  "places": [
+    {"name": "Famed", "lat": -30.0400303, "lon": -51.2075511},
+    {"name": "HCPA", "lat": -30.0386784, "lon": -51.2066248},
+    {"name": "HPS", "lat": -30.0369333, "lon": -51.2098087},
+    {"name": "Campus Saúde", "lat": -30.0402784, "lon": -51.2065759}
+  ],
+  "radius_km": 1.2,
+  "neighborhoods": ["Santa Cecília", "Rio Branco", "Bom Fim", "Santana", "Farroupilha", "Independência", "Moinhos de Vento", "Jardim Botânico"],
+  "exclude_neighborhoods": ["Centro Histórico"]
+}

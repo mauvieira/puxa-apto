@@ -2,13 +2,14 @@
 import logging
 import re
 from typing import Dict, List, Optional, Set
+from urllib.parse import urlparse
 
 from ..models.apartment import Apartment
 
 logger = logging.getLogger(__name__)
 
 
-def create_apartment_fingerprint(
+def create_apartment_fingerprint(  # sensors: complexity=20, statements=46 -- baseline: predates sensors; lower via refactor-tick
     apt: Dict, require_all_fields: bool = False
 ) -> Optional[str]:
     if isinstance(apt, Apartment):
@@ -27,18 +28,14 @@ def create_apartment_fingerprint(
     if not street or not neighborhood:
         return None
 
-    if require_all_fields:
-        if not area or not bedrooms or not price:
-            return None
+    if require_all_fields and (not area or not bedrooms or not price):
+        return None
 
     street_normalized = re.sub(r"[^\w\s]", "", street)
     street_normalized = re.sub(r"\s+", " ", street_normalized).strip()
 
     street_parts = street_normalized.split()
-    if len(street_parts) > 0:
-        street_key = " ".join(street_parts[:3])
-    else:
-        street_key = street_normalized[:40]
+    street_key = " ".join(street_parts[:3]) if street_parts else street_normalized[:40]
 
     neighborhood_normalized = re.sub(r"[^\w\s]", "", neighborhood)
     neighborhood_normalized = re.sub(r"\s+", " ", neighborhood_normalized).strip()
@@ -81,12 +78,42 @@ def create_apartment_fingerprint(
     return fingerprint if len(parts) >= 2 and parts[0] and parts[1] else None
 
 
-def filter_new_apartments(
-    apartments: List[Dict], existing_links: Set[str], existing_fingerprints: Set[str]
+_EMPTY = (None, "", [])
+
+
+def drop_cross_posts(apartments: List[Dict]) -> List[Dict]:  # sensors: complexity=13 -- baseline: predates sensors; lower via refactor-tick
+    """Keep one listing per agency_ref: the agency's own copy when present, else the first seen.
+
+    The kept copy's empty fields are filled from the dropped ones, e.g. coordinates the
+    agency's map doesn't have yet. Listings without a ref pass through; order is kept.
+    """
+    copies: Dict[str, List[Dict]] = {}
+    for apt in apartments:
+        if apt.get("agency_ref"):
+            copies.setdefault(apt["agency_ref"], []).append(apt)
+
+    kept: Dict[str, Dict] = {}
+    for ref, group in copies.items():
+        host = ref.split(":")[0] + ".com.br"
+        own = next((a for a in group if urlparse(a.get("link", "")).netloc.endswith(host)), group[0])
+        for other in group:
+            for key, value in other.items():
+                if own.get(key) in _EMPTY and value not in _EMPTY:
+                    own[key] = value
+        kept[ref] = own
+    return [a for a in apartments if not a.get("agency_ref") or kept[a["agency_ref"]] is a]
+
+
+def filter_new_apartments(  # sensors: function-lines=66, complexity=24, statements=50 -- baseline: predates sensors; lower via refactor-tick
+    apartments: List[Dict],
+    existing_links: Set[str],
+    existing_fingerprints: Set[str],
+    existing_refs: Set[str],
 ) -> List[Dict]:
     new_apartments = []
     duplicates_by_link = 0
     duplicates_by_fingerprint = 0
+    duplicates_by_ref = 0
     skipped_no_data = 0
 
     for apt in apartments:
@@ -102,10 +129,14 @@ def filter_new_apartments(
             continue
 
         is_duplicate = False
+        ref = apt.get("agency_ref")
 
         if link in existing_links:
             is_duplicate = True
             duplicates_by_link += 1
+        elif ref and ref in existing_refs:
+            is_duplicate = True
+            duplicates_by_ref += 1
 
         if not is_duplicate:
             fingerprint_full = create_apartment_fingerprint(apt, require_all_fields=True)
@@ -130,6 +161,8 @@ def filter_new_apartments(
         if not is_duplicate:
             new_apartments.append(apt)
             existing_links.add(link)
+            if ref:
+                existing_refs.add(ref)
 
             fingerprint = create_apartment_fingerprint(apt, require_all_fields=True)
             if not fingerprint:
@@ -137,9 +170,10 @@ def filter_new_apartments(
             if fingerprint:
                 existing_fingerprints.add(fingerprint)
 
-    if duplicates_by_link > 0 or duplicates_by_fingerprint > 0:
+    if duplicates_by_link > 0 or duplicates_by_fingerprint > 0 or duplicates_by_ref > 0:
         logger.info(
-            f"Duplicates detected: {duplicates_by_link} by link, {duplicates_by_fingerprint} by fingerprint"
+            f"Duplicates detected: {duplicates_by_link} by link, {duplicates_by_fingerprint} by fingerprint, "
+            f"{duplicates_by_ref} by agency code"
         )
     if skipped_no_data > 0:
         logger.warning(

@@ -1,4 +1,14 @@
 *.pyc
 *.csv
 *.json
+*.xlsx
 *.log
+.venv/
+*.egg-info/
+.env
+!buscas/*.json
+!.claude/settings.json
+!tools/guidance/*.json
+.coverage
+.coverage.*
+mutants/
